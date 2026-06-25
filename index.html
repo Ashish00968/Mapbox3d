@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mapbox Video Studio</title>
+  <meta name="description" content="Cinematic 4K trek flythrough video generator using Mapbox 3D terrain">
+
+  <!-- Mapbox GL JS v3 -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.css" rel="stylesheet">
+  
+  <!-- Mapbox GL Geocoder -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" type="text/css">
+
+  <!-- Tabler Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="css/editor-mode.css">
+</head>
+<body style="display:flex; flex-direction:column; height:100vh; overflow:hidden; margin:0">
+
+<div id="top-workspace" style="display:flex; flex:1; min-height:0;">
+
+  <!-- ═══ LEFT PANEL ═══ -->
+  <div id="left-panel">
+    <div id="left-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:13px; font-weight:500; color:var(--text-primary); display: flex; align-items: center; gap: 8px;">
+        <i class="ti ti-mountain" aria-hidden="true" style="font-size: 16px;"></i> Video Studio
+      </span>
+      <div style="display:flex; gap: 8px;">
+        <button class="btn-ghost" id="load-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-upload"></i> Load</button>
+        <button class="btn-ghost" id="save-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-download"></i> Save</button>
+        <input type="file" id="load-project-input" accept=".studio,.json" style="display:none">
+      </div>
+    </div>
+    <div id="left-tabs">
+      <button class="tab-btn active" data-tab="route">Route</button>
+      <button class="tab-btn" data-tab="camera">Camera</button>
+      <button class="tab-btn" data-tab="overlays">Overlays</button>
+      <button class="tab-btn" data-tab="export">Export</button>
+    </div>
+
+    <!-- Tab: Route -->
+    <div id="tab-route" class="tab-content active">
+      <div class="panel-section">
+        <span class="section-label">Trek path</span>
+        <div class="drop-zone" id="trek-drop-zone">
+          <i class="ti ti-route" style="font-size: 24px; opacity: 0.5; margin-bottom: 6px;"></i>
+          <div>Drop GPX / KML here</div>
+        </div>
+        <input type="file" id="trek-file-input" accept=".gpx,.kml" style="display:none">
+        <button class="btn-ghost" id="browse-btn" style="width: 100%; margin-top: 8px;">Browse file</button>
+        <div id="trek-info" class="trek-info" style="display:none"></div>
+      </div>
+      <div class="panel-section">
+        <span class="section-label">Map style</span>
+        <select class="select-input" id="style-select" style="margin-bottom: 8px;">
+          <option value="satellite-streets-v12" selected>Satellite Streets</option>
+          <option value="satellite-v9">Satellite</option>
+          <option value="outdoors-v12">Outdoors</option>
+          <option value="standard">Standard</option>
+          <option value="custom">Custom URL...</option>
+        </select>
+        <input type="text" id="custom-style-input" class="select-input" placeholder="mapbox://styles/..." style="display:none; margin-bottom: 12px; cursor: text;">
+        
+        <span class="section-label" style="margin-top: 12px;">Map Layers</span>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:8px">
+          <input type="checkbox" id="toggle-labels" checked> Show Labels
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:8px">
+          <input type="checkbox" id="toggle-roads" checked> Show Roads
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:8px">
+          <input type="checkbox" id="toggle-3d-buildings"> Show 3D Buildings
+        </label>
+      </div>
+      <div class="panel-section">
+        <span class="section-label">Location Pins</span>
+        <button class="btn-ghost" onclick="if(window.toggleWaypointMode) window.toggleWaypointMode()" style="width: 100%; margin-bottom: 8px; background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4);">
+          <i class="ti ti-map-pin"></i> Click Map to Drop Pin
+        </button>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="pin-text-input" class="select-input" placeholder="Pin label..." style="flex: 2; cursor: text;">
+          <button class="btn-ghost" id="add-pin-btn" style="flex: 1; padding: 6px;">Add at Center</button>
+        </div>
+        <button class="btn-ghost" id="clear-pins-btn" style="width: 100%; margin-top: 8px; color: var(--danger);">Clear All Pins</button>
+      </div>
+    </div>
+
+    <!-- Tab: Camera -->
+    <div id="tab-camera" class="tab-content">
+      <div id="shot-presets-container" class="panel-section"></div>
+      <div class="panel-section">
+        <span class="section-label">Camera</span>
+
+        <div class="slider-row">
+          <span>Pitch</span>
+          <input type="range" id="pitch-slider" min="0" max="75" value="60">
+          <span class="val-out" id="pitch-val">60°</span>
+        </div>
+
+        <div class="slider-row">
+          <span>Zoom</span>
+          <input type="range" id="zoom-slider" min="8" max="16" value="12" step="0.5">
+          <span class="val-out" id="zoom-val">12</span>
+        </div>
+
+        <div class="slider-row" style="margin-bottom: 16px;">
+          <span>Terrain</span>
+          <input type="range" id="terrain-slider" min="1" max="3" value="1.8" step="0.1">
+          <span class="val-out" id="terrain-val">1.8×</span>
+        </div>
+
+        <span class="section-label" style="margin-top: 16px;">Animation Config</span>
+        
+        <select class="select-input" id="bearing-mode-select" style="margin-bottom: 12px;">
+          <option value="follow" selected>Bearing: Follow Path</option>
+          <option value="rotate">Bearing: Auto Rotate</option>
+        </select>
+
+        <div class="slider-row" id="bearing-speed-row" style="display: none;">
+          <span>Rot. Spd</span>
+          <input type="range" id="bearing-speed-slider" min="-30" max="30" value="10">
+          <span class="val-out" id="bearing-speed-val">10°/s</span>
+        </div>
+
+        <div class="slider-row" data-hide-in="editor">
+          <span>Alt Offs</span>
+          <input type="range" id="alt-offset-slider" min="100" max="2000" value="500" step="50">
+          <span class="val-out" id="alt-offset-val">500m</span>
+        </div>
+
+        <div class="slider-row" data-hide-in="editor">
+          <span>Ahead</span>
+          <input type="range" id="look-ahead-slider" min="1" max="20" value="5">
+          <span class="val-out" id="look-ahead-val">5 pts</span>
+        </div>
+
+        <div class="slider-row" style="margin-bottom: 12px;" data-hide-in="editor">
+          <span>Smooth</span>
+          <input type="range" id="smoothing-slider" min="0" max="1" value="0.85" step="0.05">
+          <span class="val-out" id="smoothing-val">0.85</span>
+        </div>
+
+        <select class="select-input" id="easing-select">
+          <option value="linear">Easing: Linear</option>
+          <option value="ease-in-out" selected>Easing: Ease In-Out</option>
+          <option value="ease-out">Easing: Ease Out</option>
+          <option value="cut">Easing: Hard Cut</option>
+        </select>
+
+        <div style="display:flex; gap:6px; margin-top:10px">
+          <button id="btn-add-keyframe" class="btn-ghost" style="flex:1; font-size:11px; padding:5px">+ Add Keyframe</button>
+          <button id="btn-clear-keyframes" class="btn-ghost" style="flex:1; font-size:11px; padding:5px; color:var(--danger, #ef4444)">Clear All</button>
+        </div>
+
+      </div>
+
+      <div class="panel-section" id="env-controls">
+        <span class="section-label">Environment</span>
+        <div class="slider-row" style="margin-bottom: 8px;">
+          <span>Time (hr)</span>
+          <input type="range" id="time-of-day-slider" min="0" max="24" value="12" step="0.5">
+          <span class="val-out" id="time-of-day-val">12.0</span>
+        </div>
+        <div class="slider-row">
+          <span>Fog</span>
+          <input type="range" id="fog-slider" min="0" max="1" value="0.2" step="0.05">
+          <span class="val-out" id="fog-val">0.2</span>
+        </div>
+      </div>
+
+      <!-- Removed old timeline-container -->
+      <div id="speed-curve-container" class="panel-section" data-hide-in="editor"></div>
+    </div>
+
+    <!-- Tab: Overlays -->
+    <div id="tab-overlays" class="tab-content">
+      <div class="panel-section">
+        <span class="section-label">3D Model Tracking</span>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-3d-model">
+          Enable 3D Tracker (Traveler)
+        </label>
+        <div class="slider-row" id="model-scale-row" style="display:none; margin-bottom:12px;">
+          <span>Scale</span>
+          <input type="range" id="model-scale-slider" min="0.1" max="5" value="1" step="0.1">
+          <span class="val-out" id="model-scale-val">1.0</span>
+        </div>
+        <div id="model-upload-row" style="display:none;">
+          <input type="file" id="custom-model-upload" accept=".glb,.gltf" style="display:none">
+          <button class="btn-ghost" id="btn-upload-model" style="width:100%; font-size:12px; padding:6px; display:flex; align-items:center; justify-content:center; gap:6px;">
+            <i class="ti ti-upload"></i> Upload Custom .glb
+          </button>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <span class="section-label">Cinematic Overlays</span>
+        
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-title-card">
+          Show Title Card
+        </label>
+        
+        <div id="title-card-settings" style="display:none; padding:8px; background:rgba(0,0,0,0.2); border-radius:6px; margin-bottom:12px;">
+          <input type="text" id="title-text-input" placeholder="Main Title (e.g. The Himalayas)" class="select-input" style="margin-bottom:8px;">
+          <input type="text" id="subtitle-text-input" placeholder="Subtitle (e.g. Day 1)" class="select-input" style="margin-bottom:8px;">
+          <div class="slider-row">
+            <span>Size</span>
+            <input type="range" id="title-size-slider" min="20" max="100" value="48" step="1">
+            <span class="val-out" id="title-size-val">48px</span>
+          </div>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-progress-bar">
+          Show Progress Bar
+        </label>
+        
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-distance-counter">
+          Show Distance Counter
+        </label>
+      </div>
+    </div>
+
+    <!-- Tab: Export -->
+    <div id="tab-export" class="tab-content">
+      <div class="panel-section">
+        <span class="section-label">Output</span>
+        <div class="radio-group" id="aspect-ratio-group" style="margin-bottom: 12px;">
+          <label class="radio-option">
+            <input type="radio" name="aspectRatio" value="16:9" checked>
+            16:9
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="aspectRatio" value="9:16">
+            9:16 (Shorts)
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="aspectRatio" value="1:1">
+            1:1
+          </label>
+        </div>
+        <div id="aspect-ratio-container"></div>
+        <div class="radio-group" id="resolution-group">
+          <label class="radio-option">
+            <input type="radio" name="resolution" value="1080p">
+            1080p
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="resolution" value="2K">
+            2K
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="resolution" value="4K" checked>
+            4K
+          </label>
+        </div>
+        <div class="stat-row">
+          <span>Canvas size</span>
+          <span class="stat-val" id="canvas-size-out">—</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <span class="section-label">Duration</span>
+        <div class="duration-row">
+          <input type="number" class="num-input" id="duration-input" value="30" min="5" max="300">
+          <span class="duration-unit">sec</span>
+          <select class="select-input-sm" id="fps-select">
+            <option value="24">24 fps</option>
+            <option value="30" selected>30 fps</option>
+            <option value="60">60 fps</option>
+          </select>
+        </div>
+        <div class="stat-row" style="margin-top:10px">
+          <span>Total frames</span>
+          <span class="stat-val" id="total-frames-out">900 frames</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <span class="section-label">Trek Presets</span>
+        <select class="select-input" id="preset-select" style="margin-bottom: 8px;">
+          <option value="">-- Saved Presets --</option>
+        </select>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn-ghost" id="save-preset-btn" style="flex: 1; padding: 6px;">Save Current</button>
+          <button class="btn-primary" id="load-preset-btn" style="flex: 1; padding: 6px; margin-bottom: 0;">Load</button>
+        </div>
+      </div>
+
+      <div id="overlay-settings" class="panel-section"></div>
+      <div id="encoder-settings" class="panel-section"></div>
+    </div>
+  </div>
+
+  <!-- ═══ CENTER — MAP & OVERLAYS ═══ -->
+  <div id="map-container">
+    <div id="map"></div>
+    
+    <!-- Composition Guides -->
+    <div id="composition-guides" class="composition-guides">
+      <div class="guide-thirds"></div>
+      <div class="guide-safe"></div>
+    </div>
+
+    <!-- Floating toolbar -->
+    <div id="map-toolbar">
+      <!-- Custom Search Bar Container -->
+      <div id="geocoder-container"></div>
+      
+      <div class="map-tool-divider" style="margin: 0 4px;"></div>
+      
+      <button id="btn-add-waypoint" class="map-tool-btn" title="Add Keyframe (K)">
+        <i class="ti ti-map-pin-plus" aria-hidden="true"></i>
+      </button>
+      <div class="map-tool-divider"></div>
+      <button id="btn-guide-thirds" class="map-tool-btn" title="Toggle Rule of Thirds">
+        <i class="ti ti-grid-dots" aria-hidden="true"></i>
+      </button>
+      <button id="btn-guide-safe" class="map-tool-btn" title="Toggle Safe Margins">
+        <i class="ti ti-box-margin" aria-hidden="true"></i>
+      </button>
+      <div class="map-tool-divider"></div>
+      <button id="btn-camera-target" class="map-tool-btn" title="Set Camera Target (T)">
+        <i class="ti ti-target" aria-hidden="true"></i>
+      </button>
+      <button id="btn-orbit" class="map-tool-btn" title="Orbit shot (O)">
+        <i class="ti ti-rotate-clockwise" aria-hidden="true"></i>
+      </button>
+      <button id="photo-btn" class="map-tool-btn" title="Photo (P)">
+        <i class="ti ti-camera" aria-hidden="true"></i>
+      </button>
+      <div class="map-tool-divider"></div>
+      <button id="preview-btn" class="map-tool-btn map-tool-primary" title="Preview (Space)">
+        <i class="ti ti-player-play" aria-hidden="true"></i>
+      </button>
+      <button id="btn-stop" class="map-tool-btn" title="Stop (Esc)" style="display:none">
+        <i class="ti ti-player-stop" aria-hidden="true"></i>
+      </button>
+      <button id="capture-btn" class="map-tool-btn map-tool-success" title="Capture (C)">
+        <i class="ti ti-download" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <!-- Status bar -->
+    <div id="status-bar">
+      <span id="status-text">Ready</span>
+      <span id="status-right">
+        <span id="canvas-dims">—</span>
+        <span id="fps-readout">30fps</span>
+      </span>
+    </div>
+
+    <!-- Progress overlay (for capture) -->
+    <div id="progress-overlay" style="display:none">
+      <div id="progress-track"><div id="progress-bar"></div></div>
+      <span id="frame-counter"></span>
+    </div>
+
+    <!-- Capture Overlay -->
+    <div id="capture-overlay" style="display: none;">
+      <div class="capture-modal">
+        <h3 style="margin: 0 0 16px 0; font-weight: 500;" id="capture-title">Capturing Frames</h3>
+        <div style="width: 100%; height: 6px; background: var(--bg-panel-section); border-radius: 3px; overflow: hidden; margin-bottom: 12px; border: 1px solid var(--border);">
+          <div id="capture-progress-bar" style="width: 0%; height: 100%; background: var(--accent-green); transition: width 0.1s linear;"></div>
+        </div>
+        <div id="capture-status" style="font-size: 13px; color: var(--text-secondary); margin-bottom: 24px; font-variant-numeric: tabular-nums;">Preparing...</div>
+        
+        <div id="ffmpeg-container" style="display: none; margin-bottom: 24px; text-align: left;">
+          <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">Run this to encode video:</div>
+          <div class="ffmpeg-cmd" id="ffmpeg-command">
+            ffmpeg -framerate 30 -i frame_%05d.png -c:v libx264 -pix_fmt yuv420p -crf 18 output.mp4
+          </div>
+        </div>
+
+        <button id="capture-cancel-btn" class="btn-ghost" style="padding: 8px 16px;">Cancel Capture</button>
+        <button id="capture-close-btn" class="btn-primary" style="display: none; padding: 8px 16px;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CONTEXT PANEL ═══ -->
+  <div id="context-panel">
+    <div id="context-panel-header">
+      <span id="context-panel-title">Context</span>
+      <button id="context-panel-close" onclick="window.closeContextPanel()">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+    </div>
+    <div id="context-panel-body"></div>
+    <div id="keyframe-edit-panel" style="display:none"></div>
+  </div>
+  </div>
+  <!-- End of top-workspace -->
+</div>
+
+<!-- ═══ TIMELINE WORKSPACE ═══ -->
+<div id="timeline-workspace" class="timeline-workspace">
+  <div id="timeline-header" class="timeline-header">
+    <div style="display:flex; align-items:center; gap: 12px;">
+      <span style="font-size:12px; font-weight:600; color:var(--text-primary);"><i class="ti ti-timeline"></i> Timeline Editor</span>
+      <div style="display:flex; gap: 4px;">
+        <button id="timeline-play-pause" class="btn-ghost" style="padding: 4px 8px; font-size: 14px;"><i class="ti ti-player-play"></i></button>
+        <button id="timeline-stop" class="btn-ghost" style="padding: 4px 8px; font-size: 14px;"><i class="ti ti-player-stop"></i></button>
+      </div>
+    </div>
+    <span id="timeline-time-display" style="font-size:12px; font-family: 'JetBrains Mono', monospace; color:var(--accent-base);">00:00 / 00:30</span>
+  </div>
+  
+  <div style="display: flex; flex: 1; min-height:0; position:relative;">
+    <!-- Track Headers -->
+    <div id="timeline-track-headers" class="timeline-track-headers">
+      <div class="track-header" style="height: 30px; border-bottom: 1px solid rgba(255,255,255,0.08);"></div> <!-- spacer for ruler -->
+      <div class="track-header-cell">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <i class="ti ti-camera" style="font-size:14px; color:var(--text-muted)"></i>
+          <span>Camera Position</span>
+        </div>
+        <div style="display:flex; gap:4px;">
+          <i class="ti ti-eye" style="cursor:pointer; color:var(--text-muted)"></i>
+        </div>
+      </div>
+      <div class="track-header-cell" id="track-header-audio" style="display:none; height:40px;">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <i class="ti ti-music" style="font-size:14px; color:var(--text-muted)"></i>
+          <span>Audio Track</span>
+        </div>
+        <div style="display:flex; gap:4px;">
+          <i class="ti ti-volume" style="cursor:pointer; color:var(--text-muted)"></i>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Tracks Area -->
+    <div id="timeline-tracks-area" class="timeline-tracks-area">
+      <div id="timeline-scroll-content" style="position:relative; width: 2000px; min-height: 100%;">
+        <!-- Ruler -->
+        <div id="timeline-ruler" class="timeline-ruler">
+          <canvas id="ruler-canvas" style="width:100%; height:100%; pointer-events:none;"></canvas>
+        </div>
+        
+        <!-- Track Lanes -->
+        <div class="track-lane" id="track-lane-position"></div>
+        <div class="track-lane" id="track-lane-audio" style="height:40px; display:none; border-bottom: 1px solid rgba(255,255,255,0.08);">
+          <canvas id="audio-waveform-canvas" style="width:100%; height:100%; pointer-events:none; opacity:0.8;"></canvas>
+        </div>
+        
+        <!-- Playhead -->
+        <div id="timeline-playhead" class="playhead-line">
+          <div class="playhead-handle" id="playhead-handle">
+            <svg viewBox="0 0 13 16" xmlns="http://www.w3.org/2000/svg">
+              <path d="M0,0 L13,0 L13,10 L6.5,16 L0,10 Z"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- Mapbox GL JS v3 -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.12.0/mapbox-gl.js"></script>
+  
+  <!-- JSZip & FileSaver for exporting -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    
+  <!-- MP4 Muxer -->
+  <script src="https://unpkg.com/mp4-muxer/build/mp4-muxer.js"></script>
+  
+  <!-- App -->
+  <script type="module" src="js/project.js"></script>
+  <script type="module" src="js/shot-presets.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

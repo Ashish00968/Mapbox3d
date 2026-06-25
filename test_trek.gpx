@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Test" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Test Trek Patalsu</name>
+  </metadata>
+  <trk>
+    <name>Patalsu Path</name>
+    <trkseg>
+      <trkpt lat="32.3168" lon="77.1610"><ele>2500</ele></trkpt>
+      <trkpt lat="32.3200" lon="77.1650"><ele>2650</ele></trkpt>
+      <trkpt lat="32.3250" lon="77.1700"><ele>3000</ele></trkpt>
+      <trkpt lat="32.3300" lon="77.1720"><ele>3500</ele></trkpt>
+      <trkpt lat="32.3350" lon="77.1750"><ele>4200</ele></trkpt>
+    </trkseg>
+  </trk>
+</gpx>

@@ -1,0 +1,4 @@
+/* ── Editor Mode Visibility ── */
+[data-show-in="editor"] { display: none !important; }
+body.editor-mode [data-show-in="editor"] { display: block !important; }
+body.editor-mode [data-hide-in="editor"] { display: none !important; }
