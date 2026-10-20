@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "mapbox-web-integration-patterns": {
+      "source": "mapbox/mapbox-agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapbox-web-integration-patterns/SKILL.md",
+      "computedHash": "92bb0f77b79861c7962df4e766e0b455377932abd625ac9c6aa09dbfcaa5d1e7"
+    }
+  }
+}

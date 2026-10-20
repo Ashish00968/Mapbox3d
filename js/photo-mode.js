@@ -112,7 +112,7 @@ if (state.map.isStyleLoaded()) {
 addPinBtn.addEventListener('click', () => {
   const text = pinInput.value.trim();
   if (!text) {
-    alert("Please enter a label for the pin.");
+    if (window.updateStatus) window.updateStatus('Please enter a label for the pin.');
     return;
   }
   

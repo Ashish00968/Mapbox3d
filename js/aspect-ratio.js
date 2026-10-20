@@ -17,7 +17,7 @@ function applyAspectRatio(ratioStr) {
   if (!RATIOS[ratioStr]) return;
   STUDIO_CONFIG.aspectRatio = ratioStr;
   
-  const mapWrap = document.getElementById('map-wrap');
+  const mapWrap = document.getElementById('map-container');
   const mapEl = document.getElementById('map');
   const ratioData = RATIOS[ratioStr];
 

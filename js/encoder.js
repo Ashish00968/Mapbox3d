@@ -1,13 +1,52 @@
 import { STUDIO_CONFIG, state } from './store.js';
 
 // ── WebCodecs availability check ──
+// Guarded with `typeof` so this module is importable in node (tests) where the
+// WebCodecs globals do not exist. The pure timestamp helper below never touches
+// these globals, so it works regardless of WebCodecs support.
 const WEBCODECS_SUPPORTED = typeof VideoEncoder !== 'undefined'
                          && typeof VideoFrame  !== 'undefined';
 
-window.webCodecsSupported = WEBCODECS_SUPPORTED;
+if (typeof window !== 'undefined') {
+  window.webCodecsSupported = WEBCODECS_SUPPORTED;
+}
 
 if (!WEBCODECS_SUPPORTED) {
   console.log('[encoder] WebCodecs not available — ZIP export will be used as fallback');
+  // Force the fallback path and notify the user (Req 1.9, task 6.7)
+  if (typeof window !== 'undefined') {
+    STUDIO_CONFIG.exportMode = 'zip';
+    // Defer bus emission until event-bus.js is loaded (import order: store → encoder → event-bus)
+    Promise.resolve().then(() => {
+      try {
+        const bus = window.Studio && window.Studio.bus;
+        if (bus) bus.emit('status', { level: 'info', message: 'WebCodecs unavailable — using PNG sequence export' });
+      } catch { /* bus not yet available; status is in the console */ }
+    });
+  }
+}
+
+// ── Pure presentation-timestamp helper (Req 1.4, 1.5; Property 3) ──
+//
+// Presentation timestamps MUST increase monotonically by exactly one frame
+// interval. The interval is derived from a SINGLE export-wide frame rate
+// (`exportFps`) and a MONOTONIC global frame index — never from a per-segment
+// fps. This decouples timestamp correctness from segments that mix fps.
+//
+//   timestamp_us(i) = round(i * (1_000_000 / exportFps))
+//
+// VideoFrame timestamps are integer microseconds, so the result is rounded.
+// Because the per-step interval (1e6 / exportFps) is >= 1 for any fps <= 1e6,
+// rounding preserves strict monotonicity (each step adds at least 1 µs).
+//
+// This function is pure (no DOM, no WebCodecs, no module state) so it is
+// importable on its own for the Property 3 test (task 6.9).
+//
+// @param {number} globalIndex monotonic export-wide frame index (0-based)
+// @param {number} exportFps   single export-wide frames-per-second (> 0)
+// @returns {number} presentation timestamp in integer microseconds
+export function frameTimestampUs(globalIndex, exportFps) {
+  return Math.round(globalIndex * (1_000_000 / exportFps));
 }
 
 // ── Export mode state ──
@@ -71,12 +110,14 @@ async function initEncoder(fps, width, height, codec) {
 }
 
 // ── Encode one PNG dataURL as a VideoFrame ──
-async function encodeFrame(dataUrl, fps) {
+// Forwards the (globalIndex, exportFps) arguments straight through to
+// encodeFrameRaw, which also accepts the legacy (fps) form (see below).
+async function encodeFrame(dataUrl, globalIndexOrFps, exportFps) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = async () => {
-      const bitmap    = await createImageBitmap(img);
-      await encodeFrameRaw(bitmap, fps);
+      const bitmap = await createImageBitmap(img);
+      await encodeFrameRaw(bitmap, globalIndexOrFps, exportFps);
       resolve();
     };
     img.onerror = reject;
@@ -85,10 +126,36 @@ async function encodeFrame(dataUrl, fps) {
 }
 
 // ── Encode raw ImageBitmap directly (Optimized) ──
-async function encodeFrameRaw(bitmap, fps) {
-  const timestamp = (frameCount / fps) * 1_000_000; // microseconds
-  const frame     = new VideoFrame(bitmap, { timestamp, duration: 1_000_000 / fps });
-  videoEnc.encode(frame, { keyFrame: frameCount % (fps * 2) === 0 });
+//
+// New signature (Req 1.4/1.5): encodeFrameRaw(bitmap, globalIndex, exportFps)
+//   - `globalIndex` is the monotonic export-wide frame index
+//   - `exportFps`   is the single export-wide frame rate
+// The presentation timestamp is computed from these via frameTimestampUs, so it
+// strictly increases by exactly one frame interval regardless of per-segment fps.
+//
+// Backward-compatible legacy signature: encodeFrameRaw(bitmap, fps)
+//   When `exportFps` is omitted, the second argument is treated as the fps and
+//   the internal monotonic `frameCount` is used as the global index — matching
+//   the previous behavior. This keeps current capture.js callers working until
+//   they are rewired (task 6.5).
+async function encodeFrameRaw(bitmap, globalIndexOrFps, exportFps) {
+  let globalIndex, fps;
+  if (exportFps === undefined) {
+    // Legacy call: (bitmap, fps) — derive the index from the monotonic counter.
+    fps = globalIndexOrFps;
+    globalIndex = frameCount;
+  } else {
+    // New call: (bitmap, globalIndex, exportFps).
+    globalIndex = globalIndexOrFps;
+    fps = exportFps;
+  }
+
+  const timestamp = frameTimestampUs(globalIndex, fps); // integer microseconds
+  const duration  = Math.round(1_000_000 / fps);
+  const frame     = new VideoFrame(bitmap, { timestamp, duration });
+  // Key every ~2 seconds, keyed off the monotonic global index.
+  const keyInterval = Math.max(1, Math.round(fps) * 2);
+  videoEnc.encode(frame, { keyFrame: globalIndex % keyInterval === 0 });
   frame.close();
   bitmap.close();
   frameCount++;
@@ -146,6 +213,25 @@ async function finalizeAndDownload(fps, totalFrames) {
   console.log('MP4 saved — ' + (blob.size / 1_000_000).toFixed(1) + ' MB');
 }
 
+// ── Dispose encoder resources (cancellation / cleanup) ──
+//
+// Closes the VideoEncoder and audio encoder (if present), nulls the muxer, and
+// resets the monotonic global frame index. This supports cancellation cleanup
+// so memory returns to baseline (tasks 6.5/6.6, Req 1.8/1.10). Safe to call
+// multiple times and safe when nothing was initialized.
+function dispose() {
+  try {
+    if (videoEnc && videoEnc.state !== 'closed') videoEnc.close();
+  } catch (e) { /* already closed / never configured */ }
+  try {
+    if (audioEnc && audioEnc.state !== 'closed') audioEnc.close();
+  } catch (e) { /* already closed / never configured */ }
+  videoEnc   = null;
+  audioEnc   = null;
+  muxer      = null;
+  frameCount = 0; // reset the monotonic global frame index
+}
+
 // ── Audio import ──
 function initAudioImport() {
   const input = document.getElementById('audio-file-input');
@@ -177,21 +263,21 @@ function buildEncoderUI() {
 
   container.innerHTML = `
     <p class="section-label">Export mode</p>
-    <div style="display:flex; gap:6px; margin-bottom:8px">
-      <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text-secondary); cursor:pointer">
+    <div class="encoder-modes">
+      <label class="encoder-mode">
         <input type="radio" name="export-mode" value="zip" ${STUDIO_CONFIG.exportMode==='zip'?'checked':''}> ZIP + FFmpeg
       </label>
-      <label style="display:flex; align-items:center; gap:4px; font-size:11px; color:${supported?'var(--text-secondary)':'var(--text-muted)'}; cursor:pointer" title="${supported?'':'Requires Chrome 94+'}">
+      <label class="encoder-mode${supported ? '' : ' encoder-mode--disabled'}" title="${supported?'':'Requires Chrome 94+'}">
         <input type="radio" name="export-mode" value="webcodecs" ${!supported?'disabled':''} ${STUDIO_CONFIG.exportMode==='webcodecs'?'checked':''}> Direct MP4
-        ${!supported ? '<span style="color:#f59e0b; font-size:10px"> ⚠ Chrome 94+ only</span>' : ''}
+        ${!supported ? '<span class="encoder-warn"> ⚠ Chrome 94+ only</span>' : ''}
       </label>
     </div>
     ${supported ? `
-      <div id="audio-import-row" style="margin-top:6px">
-        <label style="font-size:11px; color:var(--text-secondary); display:block; margin-bottom:4px">
+      <div id="audio-import-row" class="encoder-audio-row">
+        <label class="encoder-audio-label">
           Audio track (optional)
         </label>
-        <input type="file" id="audio-file-input" accept="audio/*" class="select-input" style="font-size:11px; width:100%; background-image:none;">
+        <input type="file" id="audio-file-input" accept="audio/*" class="select-input encoder-audio-input">
       </div>
     ` : ''}
   `;
@@ -205,14 +291,28 @@ function buildEncoderUI() {
   if (supported) initAudioImport();
 }
 
-document.addEventListener('DOMContentLoaded', () => buildEncoderUI());
-
 // ── Public interface for capture.js ──
-window.EncoderAPI = {
+// Guarded for node/test imports where `window`/`document` do not exist (the
+// pure frameTimestampUs export above is importable without any of this).
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => buildEncoderUI());
+}
+
+const EncoderAPI = {
   supported: true,
   initEncoder,
   encodeFrame,
   encodeFrameRaw,
   finalizeAndDownload,
-  initAudioImport
+  initAudioImport,
+  dispose,
+  frameTimestampUs
 };
+
+if (typeof window !== 'undefined') {
+  window.EncoderAPI = EncoderAPI;
+
+  // Also register under the Studio namespace (design "Decoupling strategy").
+  window.Studio = window.Studio || {};
+  window.Studio.encoder = EncoderAPI;
+}

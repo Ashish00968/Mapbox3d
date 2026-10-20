@@ -17,8 +17,10 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
 
   <!-- App styles -->
+  <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="css/editor-mode.css">
+  <link rel="stylesheet" href="css/components.css">
 </head>
 <body style="display:flex; flex-direction:column; height:100vh; overflow:hidden; margin:0">
 
@@ -33,20 +35,20 @@
       <div style="display:flex; gap: 8px;">
         <button class="btn-ghost" id="load-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-upload"></i> Load</button>
         <button class="btn-ghost" id="save-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-download"></i> Save</button>
-        <input type="file" id="load-project-input" accept=".studio,.json" style="display:none">
+        <input type="file" id="load-project-input" accept=".mbv,.studio,.json" style="display:none">
       </div>
     </div>
-    <div id="left-tabs">
-      <button class="tab-btn active" data-tab="route">Route</button>
-      <button class="tab-btn" data-tab="camera">Camera</button>
-      <button class="tab-btn" data-tab="overlays">Overlays</button>
-      <button class="tab-btn" data-tab="export">Export</button>
+    <div id="left-tabs" class="tab-nav" role="tablist" aria-label="Main panels">
+      <button class="tab-btn active" data-tab="route" role="tab" aria-controls="tab-route" aria-selected="true">Route</button>
+      <button class="tab-btn" data-tab="camera" role="tab" aria-controls="tab-camera" aria-selected="false">Camera</button>
+      <button class="tab-btn" data-tab="overlays" role="tab" aria-controls="tab-overlays" aria-selected="false">Overlays</button>
+      <button class="tab-btn" data-tab="export" role="tab" aria-controls="tab-export" aria-selected="false">Export</button>
     </div>
 
     <!-- Tab: Route -->
     <div id="tab-route" class="tab-content active">
-      <div class="panel-section">
-        <span class="section-label">Trek path</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Trek path</legend>
         <div class="drop-zone" id="trek-drop-zone">
           <i class="ti ti-route" style="font-size: 24px; opacity: 0.5; margin-bottom: 6px;"></i>
           <div>Drop GPX / KML here</div>
@@ -54,9 +56,9 @@
         <input type="file" id="trek-file-input" accept=".gpx,.kml" style="display:none">
         <button class="btn-ghost" id="browse-btn" style="width: 100%; margin-top: 8px;">Browse file</button>
         <div id="trek-info" class="trek-info" style="display:none"></div>
-      </div>
-      <div class="panel-section">
-        <span class="section-label">Map style</span>
+      </fieldset>
+      <fieldset class="panel-section">
+        <legend class="section-label">Map style</legend>
         <select class="select-input" id="style-select" style="margin-bottom: 8px;">
           <option value="satellite-streets-v12" selected>Satellite Streets</option>
           <option value="satellite-v9">Satellite</option>
@@ -76,10 +78,10 @@
         <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:8px">
           <input type="checkbox" id="toggle-3d-buildings"> Show 3D Buildings
         </label>
-      </div>
-      <div class="panel-section">
-        <span class="section-label">Location Pins</span>
-        <button class="btn-ghost" onclick="if(window.toggleWaypointMode) window.toggleWaypointMode()" style="width: 100%; margin-bottom: 8px; background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4);">
+      </fieldset>
+      <fieldset class="panel-section">
+        <legend class="section-label">Location Pins</legend>
+        <button class="btn-ghost" id="btn-click-drop-pin" style="width: 100%; margin-bottom: 8px; background: rgba(74,158,255,0.15); border: 1px solid rgba(74,158,255,0.4);">
           <i class="ti ti-map-pin"></i> Click Map to Drop Pin
         </button>
         <div style="display: flex; gap: 8px;">
@@ -87,14 +89,14 @@
           <button class="btn-ghost" id="add-pin-btn" style="flex: 1; padding: 6px;">Add at Center</button>
         </div>
         <button class="btn-ghost" id="clear-pins-btn" style="width: 100%; margin-top: 8px; color: var(--danger);">Clear All Pins</button>
-      </div>
+      </fieldset>
     </div>
 
     <!-- Tab: Camera -->
     <div id="tab-camera" class="tab-content">
       <div id="shot-presets-container" class="panel-section"></div>
-      <div class="panel-section">
-        <span class="section-label">Camera</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Camera</legend>
 
         <div class="slider-row">
           <span>Pitch</span>
@@ -156,11 +158,12 @@
           <button id="btn-add-keyframe" class="btn-ghost" style="flex:1; font-size:11px; padding:5px">+ Add Keyframe</button>
           <button id="btn-clear-keyframes" class="btn-ghost" style="flex:1; font-size:11px; padding:5px; color:var(--danger, #ef4444)">Clear All</button>
         </div>
+        <button id="btn-auto-director" class="btn-primary" style="width:100%; margin-top:8px; font-size:11px; padding:6px">🎬 Cinematic Auto-Director</button>
 
-      </div>
+      </fieldset>
 
-      <div class="panel-section" id="env-controls">
-        <span class="section-label">Environment</span>
+      <fieldset class="panel-section" id="env-controls">
+        <legend class="section-label">Environment</legend>
         <div class="slider-row" style="margin-bottom: 8px;">
           <span>Time (hr)</span>
           <input type="range" id="time-of-day-slider" min="0" max="24" value="12" step="0.5">
@@ -171,7 +174,7 @@
           <input type="range" id="fog-slider" min="0" max="1" value="0.2" step="0.05">
           <span class="val-out" id="fog-val">0.2</span>
         </div>
-      </div>
+      </fieldset>
 
       <!-- Removed old timeline-container -->
       <div id="speed-curve-container" class="panel-section" data-hide-in="editor"></div>
@@ -179,8 +182,8 @@
 
     <!-- Tab: Overlays -->
     <div id="tab-overlays" class="tab-content">
-      <div class="panel-section">
-        <span class="section-label">3D Model Tracking</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">3D Model Tracking</legend>
         <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
           <input type="checkbox" id="toggle-3d-model">
           Enable 3D Tracker (Traveler)
@@ -196,10 +199,10 @@
             <i class="ti ti-upload"></i> Upload Custom .glb
           </button>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="panel-section">
-        <span class="section-label">Cinematic Overlays</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Cinematic Overlays</legend>
         
         <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
           <input type="checkbox" id="toggle-title-card">
@@ -225,13 +228,49 @@
           <input type="checkbox" id="toggle-distance-counter">
           Show Distance Counter
         </label>
-      </div>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-compass">
+          Show Compass Rose
+        </label>
+      </fieldset>
+
+      <fieldset class="panel-section">
+        <legend class="section-label">Cinematic Effects</legend>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-vignette">
+          Show Vignette
+        </label>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-letterbox">
+          Widescreen Mattes (2.35:1)
+        </label>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-lut">
+          Cinematic Color LUT
+        </label>
+        
+        <div id="lut-settings" style="display:none; padding:8px; background:rgba(0,0,0,0.2); border-radius:6px; margin-bottom:12px;">
+          <select id="lut-type" class="select-input-sm" style="width: 100%;">
+            <option value="warm">Warm / Golden Hour</option>
+            <option value="cool">Cool / Blue Hour</option>
+          </select>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-bottom:12px">
+          <input type="checkbox" id="toggle-tiltshift">
+          Tilt-Shift Depth of Field
+        </label>
+      </fieldset>
     </div>
 
     <!-- Tab: Export -->
     <div id="tab-export" class="tab-content">
-      <div class="panel-section">
-        <span class="section-label">Output</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Output</legend>
         <div class="radio-group" id="aspect-ratio-group" style="margin-bottom: 12px;">
           <label class="radio-option">
             <input type="radio" name="aspectRatio" value="16:9" checked>
@@ -265,10 +304,14 @@
           <span>Canvas size</span>
           <span class="stat-val" id="canvas-size-out">—</span>
         </div>
-      </div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer; margin-top:12px">
+          <input type="checkbox" id="toggle-performance-mode">
+          Performance Mode (1080p, 30fps)
+        </label>
+      </fieldset>
 
-      <div class="panel-section">
-        <span class="section-label">Duration</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Duration</legend>
         <div class="duration-row">
           <input type="number" class="num-input" id="duration-input" value="30" min="5" max="300">
           <span class="duration-unit">sec</span>
@@ -282,10 +325,10 @@
           <span>Total frames</span>
           <span class="stat-val" id="total-frames-out">900 frames</span>
         </div>
-      </div>
+      </fieldset>
 
-      <div class="panel-section">
-        <span class="section-label">Trek Presets</span>
+      <fieldset class="panel-section">
+        <legend class="section-label">Trek Presets</legend>
         <select class="select-input" id="preset-select" style="margin-bottom: 8px;">
           <option value="">-- Saved Presets --</option>
         </select>
@@ -293,16 +336,15 @@
           <button class="btn-ghost" id="save-preset-btn" style="flex: 1; padding: 6px;">Save Current</button>
           <button class="btn-primary" id="load-preset-btn" style="flex: 1; padding: 6px; margin-bottom: 0;">Load</button>
         </div>
-      </div>
+      </fieldset>
 
-      <div id="overlay-settings" class="panel-section"></div>
       <div id="encoder-settings" class="panel-section"></div>
     </div>
   </div>
 
   <!-- ═══ CENTER — MAP & OVERLAYS ═══ -->
   <div id="map-container">
-    <div id="map"></div>
+    <div id="map" role="application" aria-label="Interactive 3D Map"></div>
     
     <!-- Composition Guides -->
     <div id="composition-guides" class="composition-guides">
@@ -317,34 +359,34 @@
       
       <div class="map-tool-divider" style="margin: 0 4px;"></div>
       
-      <button id="btn-add-waypoint" class="map-tool-btn" title="Add Keyframe (K)">
+      <button id="btn-add-waypoint" class="map-tool-btn" title="Add Keyframe (K)" aria-label="Add Keyframe">
         <i class="ti ti-map-pin-plus" aria-hidden="true"></i>
       </button>
       <div class="map-tool-divider"></div>
-      <button id="btn-guide-thirds" class="map-tool-btn" title="Toggle Rule of Thirds">
+      <button id="btn-guide-thirds" class="map-tool-btn" title="Toggle Rule of Thirds" aria-label="Toggle Rule of Thirds" aria-pressed="false">
         <i class="ti ti-grid-dots" aria-hidden="true"></i>
       </button>
-      <button id="btn-guide-safe" class="map-tool-btn" title="Toggle Safe Margins">
+      <button id="btn-guide-safe" class="map-tool-btn" title="Toggle Safe Margins" aria-label="Toggle Safe Margins" aria-pressed="false">
         <i class="ti ti-box-margin" aria-hidden="true"></i>
       </button>
       <div class="map-tool-divider"></div>
-      <button id="btn-camera-target" class="map-tool-btn" title="Set Camera Target (T)">
+      <button id="btn-camera-target" class="map-tool-btn" title="Set Camera Target (T)" aria-label="Set Camera Target">
         <i class="ti ti-target" aria-hidden="true"></i>
       </button>
-      <button id="btn-orbit" class="map-tool-btn" title="Orbit shot (O)">
+      <button id="btn-orbit" class="map-tool-btn" title="Orbit shot (O)" aria-label="Add Orbit Shot">
         <i class="ti ti-rotate-clockwise" aria-hidden="true"></i>
       </button>
-      <button id="photo-btn" class="map-tool-btn" title="Photo (P)">
+      <button id="photo-btn" class="map-tool-btn" title="Photo (P)" aria-label="Take Photo">
         <i class="ti ti-camera" aria-hidden="true"></i>
       </button>
       <div class="map-tool-divider"></div>
-      <button id="preview-btn" class="map-tool-btn map-tool-primary" title="Preview (Space)">
+      <button id="preview-btn" class="map-tool-btn map-tool-primary" title="Preview (Space)" aria-label="Preview Animation">
         <i class="ti ti-player-play" aria-hidden="true"></i>
       </button>
-      <button id="btn-stop" class="map-tool-btn" title="Stop (Esc)" style="display:none">
+      <button id="btn-stop" class="map-tool-btn" title="Stop (Esc)" style="display:none" aria-label="Stop Playback">
         <i class="ti ti-player-stop" aria-hidden="true"></i>
       </button>
-      <button id="capture-btn" class="map-tool-btn map-tool-success" title="Capture (C)">
+      <button id="capture-btn" class="map-tool-btn map-tool-success" title="Capture (C)" aria-label="Capture and Export">
         <i class="ti ti-download" aria-hidden="true"></i>
       </button>
     </div>
@@ -390,7 +432,7 @@
   <div id="context-panel">
     <div id="context-panel-header">
       <span id="context-panel-title">Context</span>
-      <button id="context-panel-close" onclick="window.closeContextPanel()">
+      <button id="context-panel-close">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
     </div>

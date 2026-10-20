@@ -1,4 +1,5 @@
 import { STUDIO_CONFIG, state } from './store.js';
+import { Studio, registerLegacyAlias } from './event-bus.js';
 
 // ── Speed curve: remaps linear t → cinematic t ──
 // Uses a cubic bezier defined by 4 control points.
@@ -30,13 +31,72 @@ function solveCubicBezier(x, p1x, p1y, p2x, p2y) {
   return 3*(1-t)*(1-t)*t*p1y + 3*(1-t)*t*t*p2y + t*t*t;
 }
 
+// ── Monotone remap lookup table (Property 9: speed-curve validity) ──
+//
+// A raw cubic-bezier y(x) can dip below earlier values for control points in
+// the unit square (e.g. the "dramatic"/"slow-mid" presets), which would make
+// the camera briefly travel backwards. remapT must instead satisfy, for ANY
+// P1/P2 in the unit square: remapT(0)=0, remapT(1)=1, output clamped to [0,1],
+// and monotonically non-decreasing across [0,1].
+//
+// We guarantee this purely by sampling the raw curve on a fixed grid, clamping
+// each sample to [0,1], and taking the running (prefix) maximum. A prefix-max
+// table is non-decreasing by construction, so linearly interpolating between
+// adjacent entries yields a monotone non-decreasing mapping with exact
+// endpoints. The table is cached and rebuilt only when the control points
+// change, keeping remapT cheap on the per-frame hot path while staying a pure
+// function of (control points, input).
+const LUT_SAMPLES = 256;
+let _lut = null;   // Float64Array(LUT_SAMPLES + 1) of prefix-max y values
+let _lutKey = '';
+
+function buildMonotoneLUT(p1x, p1y, p2x, p2y) {
+  const lut = new Float64Array(LUT_SAMPLES + 1);
+  let run = 0; // running maximum → enforces non-decreasing output
+  for (let i = 0; i <= LUT_SAMPLES; i++) {
+    let y = solveCubicBezier(i / LUT_SAMPLES, p1x, p1y, p2x, p2y);
+    if (y < 0) y = 0; else if (y > 1) y = 1; // clamp output to [0,1]
+    if (y > run) run = y;
+    lut[i] = run;
+  }
+  // Pin endpoints exactly (guards against float drift in the solve).
+  lut[0] = 0;
+  lut[LUT_SAMPLES] = 1;
+  return lut;
+}
+
 // ── Remap linear t → curved t ──
-function remapT(linearT) {
+// Pure and importable (consumed by the Property 9 test, task 4.10).
+export function remapT(linearT) {
   const sc = STUDIO_CONFIG.speedCurve;
   if (!sc.enabled) return linearT;
-  return solveCubicBezier(linearT, sc.p1.x, sc.p1.y, sc.p2.x, sc.p2.y);
+
+  // Clamp the input domain and pin the endpoints exactly.
+  const x = linearT <= 0 ? 0 : (linearT >= 1 ? 1 : linearT);
+  if (x === 0) return 0;
+  if (x === 1) return 1;
+
+  // (Re)build the monotone lookup table when the curve changes.
+  const key = sc.p1.x + ',' + sc.p1.y + ',' + sc.p2.x + ',' + sc.p2.y;
+  if (_lut === null || key !== _lutKey) {
+    _lut = buildMonotoneLUT(sc.p1.x, sc.p1.y, sc.p2.x, sc.p2.y);
+    _lutKey = key;
+  }
+
+  // Linear interpolation between adjacent prefix-max samples. Both endpoints of
+  // the segment are non-decreasing, so the interpolated result is monotone.
+  const pos = x * LUT_SAMPLES;
+  const i = Math.floor(pos);
+  const frac = pos - i;
+  const y = _lut[i] + (_lut[i + 1] - _lut[i]) * frac;
+  return y < 0 ? 0 : (y > 1 ? 1 : y);
 }
-window.remapT = remapT;
+
+// Canonical home under the Studio namespace; the legacy `window.remapT` global
+// (used by animator.js / capture.js / waypoint-triggers.js) is kept working via
+// a thin @deprecated forwarder registered AFTER the namespace assignment.
+Studio.speed.remapT = remapT;
+registerLegacyAlias('remapT', 'speed.remapT');
 
 // ── SVG Speed Curve Editor ──
 const CURVE_W = 160;

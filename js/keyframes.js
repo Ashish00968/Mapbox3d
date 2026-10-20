@@ -1,4 +1,5 @@
 import { STUDIO_CONFIG, state } from './store.js';
+import { bearingDelta } from './geo.js';
 
 // ── Data structure ──
 // Each keyframe: { id, t, center: [lng, lat], pitch, zoom, bearing, terrainExag, easing }
@@ -9,12 +10,20 @@ import { STUDIO_CONFIG, state } from './store.js';
 STUDIO_CONFIG.keyframes = [];
 window.keyframeIdCounter = 0;
 
+// Default keyframe easing. `ease-in-out` has a zero derivative at both t=0 and
+// t=1, so camera velocity meets at zero on both sides of every keyframe
+// boundary — guaranteeing no instantaneous velocity jump (Req 2.2, Property 6).
+export const DEFAULT_EASING = 'ease-in-out';
+
 // ── Easing functions ──
-const EASINGS = {
+// Each easing maps segment progress [0,1] -> eased progress [0,1] with
+// f(0)=0 and f(1)=1. `ease-in-out` additionally has f'(0)=f'(1)=0 (cubic
+// smoothstep-style), which zeroes boundary velocity for Req 2.2.
+export const EASINGS = {
   'linear':       t => t,
-  'ease-in':      t => t * t * t,
-  'ease-out':     t => 1 - Math.pow(1 - t, 3),
-  'ease-in-out':  t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2,
+  'ease-in':      t => t * t * t,                                  // f'(0)=0, f'(1)=3
+  'ease-out':     t => 1 - Math.pow(1 - t, 3),                     // f'(0)=3, f'(1)=0
+  'ease-in-out':  t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2, // f'(0)=f'(1)=0
   'cut':          t => t < 1 ? 0 : 1,
 };
 
@@ -54,18 +63,20 @@ function interpolateCameraAtT(t) {
     }
   }
 
-  // Local progress within this segment
+  // Local progress within this segment, clamped to [0,1] so endpoints land
+  // exactly on segT=0 (from) and segT=1 (to).
   const segLen = to.t - from.t;
-  const segT   = segLen === 0 ? 0 : (tc - from.t) / segLen;
-  const eased  = (EASINGS[from.easing] || EASINGS['ease-in-out'])(segT);
+  let segT     = segLen === 0 ? 0 : (tc - from.t) / segLen;
+  segT = segT <= 0 ? 0 : segT >= 1 ? 1 : segT;
+  const eased  = (EASINGS[from.easing] || EASINGS[DEFAULT_EASING])(segT);
 
   // Lerp all properties
   function lerp(a, b, t) { return a + (b - a) * t; }
 
-  // Bearing lerp needs shortest-path wraparound
+  // Bearing lerp needs shortest-path wraparound (delegates to geo.js so the
+  // shortest-arc contract lives in one place; Req 2.3, Property 7).
   function lerpBearing(a, b, t) {
-    let diff = ((b - a) + 540) % 360 - 180; // shortest arc
-    return (a + diff * t + 360) % 360;
+    return (a + bearingDelta(a, b) * t + 360) % 360;
   }
 
   // Find p0, p1, p2, p3 for Catmull-Rom Spline
@@ -89,26 +100,74 @@ function interpolateCameraAtT(t) {
       return [x, y];
   }
 
+  function catmullRom1D(p0, p1, p2, p3, t) {
+      const v0 = (p2 - p0) * 0.5;
+      const v1 = (p3 - p1) * 0.5;
+      const t2 = t * t;
+      const t3 = t * t2;
+      return (2 * p1 - 2 * p2 + v0 + v1) * t3 + (-3 * p1 + 3 * p2 - 2 * v0 - v1) * t2 + v0 * t + p1;
+  }
+
   const splineCenter = catmullRom(p0, p1, p2, p3, eased);
   const linearCenter = [lerp(p1[0], p2[0], eased), lerp(p1[1], p2[1], eased)];
-  
+
   const smoothing = STUDIO_CONFIG.smoothing !== undefined ? STUDIO_CONFIG.smoothing : 0.85;
-  const finalCenter = [
-    lerp(linearCenter[0], splineCenter[0], smoothing),
-    lerp(linearCenter[1], splineCenter[1], smoothing)
-  ];
+  // C0 position continuity (Req 2.1, Property 5): pin BOTH endpoints of every
+  // segment exactly to the surrounding keyframe centers, regardless of the
+  // `smoothing` blend factor. Because adjacent segments share a keyframe, the
+  // right endpoint of segment [i-1,i] (p2 = kfs[i].center) equals the left
+  // endpoint of segment [i,i+1] (p1 = kfs[i].center), so the sampled path has
+  // no positional discontinuity at any boundary for any smoothing value.
+  let finalCenter;
+  if (eased <= 0) {
+    finalCenter = [p1[0], p1[1]];
+  } else if (eased >= 1) {
+    finalCenter = [p2[0], p2[1]];
+  } else {
+    finalCenter = [
+      lerp(linearCenter[0], splineCenter[0], smoothing),
+      lerp(linearCenter[1], splineCenter[1], smoothing)
+    ];
+  }
+
+  // Pitch
+  let pitch1 = from.pitch, pitch2 = to.pitch;
+  let pitch0 = i > 0 ? kfs[i-1].pitch : pitch1;
+  let pitch3 = i < kfs.length - 2 ? kfs[i+2].pitch : pitch2;
+  const splinePitch = catmullRom1D(pitch0, pitch1, pitch2, pitch3, eased);
+  const finalPitch = lerp(lerp(pitch1, pitch2, eased), splinePitch, smoothing);
+
+  // Zoom
+  let zoom1 = from.zoom, zoom2 = to.zoom;
+  let zoom0 = i > 0 ? kfs[i-1].zoom : zoom1;
+  let zoom3 = i < kfs.length - 2 ? kfs[i+2].zoom : zoom2;
+  const splineZoom = catmullRom1D(zoom0, zoom1, zoom2, zoom3, eased);
+  const finalZoom = lerp(lerp(zoom1, zoom2, eased), splineZoom, smoothing);
+
+  // Bearing — unwrap neighbour bearings onto the shortest arc from b1 so the
+  // spline never takes a >180° reversal between consecutive samples (Req 2.3,
+  // Property 7). All deltas go through geo.js bearingDelta.
+  let b1 = from.bearing;
+  let b2 = b1 + bearingDelta(b1, to.bearing);
+  let b0 = i > 0 ? b1 + bearingDelta(b1, kfs[i-1].bearing) : b1;
+  let b3 = i < kfs.length - 2 ? b2 + bearingDelta(b2, kfs[i+2].bearing) : b2;
+  const splineBearing = catmullRom1D(b0, b1, b2, b3, eased);
+  const finalBearing = (lerp(lerp(b1, b2, eased), splineBearing, smoothing) % 360 + 360) % 360;
 
   return {
     center:      finalCenter,
-    pitch:       lerp(from.pitch,       to.pitch,       eased),
-    zoom:        lerp(from.zoom,        to.zoom,        eased),
-    bearing:     lerpBearing(from.bearing, to.bearing,  eased),
+    pitch:       finalPitch,
+    zoom:        finalZoom,
+    bearing:     finalBearing,
     terrainExag: lerp(from.terrainExag, to.terrainExag, eased),
     timeOfDay:   lerp(from.timeOfDay || 12, to.timeOfDay || 12, eased),
     fogDensity:  lerp(from.fogDensity !== undefined ? from.fogDensity : 0.2, to.fogDensity !== undefined ? to.fogDensity : 0.2, eased),
   };
 }
 window.interpolateCameraAtT = interpolateCameraAtT;
+// ES module export so pure consumers (camera-sampler.js, property tests) can
+// import the sampler directly without relying on the window bridge.
+export { interpolateCameraAtT };
 
 // ── Capture current slider/config state as a keyframe ──
 function snapshotCurrentCamera() {
@@ -127,7 +186,7 @@ function snapshotCurrentCamera() {
     terrainExag: parseFloat(document.getElementById('terrain-slider')?.value || cfg.terrainExag || STUDIO_CONFIG.terrainExaggeration || 1.8),
     timeOfDay:   parseFloat(document.getElementById('time-of-day-slider')?.value || STUDIO_CONFIG.timeOfDay || 12),
     fogDensity:  parseFloat(document.getElementById('fog-slider')?.value || STUDIO_CONFIG.fogDensity || 0.2),
-    easing:      document.getElementById('easing-select')?.value || 'ease-in-out',
+    easing:      document.getElementById('easing-select')?.value || DEFAULT_EASING,
   };
 }
 
@@ -143,119 +202,70 @@ function addKeyframe(t) {
   }
   
   if (window.renderTracks) window.renderTracks();
+  updateKeyframePanel(t);
 }
 window.addKeyframe = addKeyframe;
 
 function removeKeyframe(t) {
   STUDIO_CONFIG.keyframes = STUDIO_CONFIG.keyframes.filter(k => Math.abs(k.t - t) > 0.005);
-  renderKeyframeStrip();
-  hideKeyframePanel();
+  if (window.renderTracks) window.renderTracks();
+  selectedKeyframeT = null;
 }
+window.removeKeyframe = removeKeyframe;
 
 function clearAllKeyframes() {
   STUDIO_CONFIG.keyframes = [];
-  renderKeyframeStrip();
-  hideKeyframePanel();
+  if (window.renderTracks) window.renderTracks();
+  selectedKeyframeT = null;
 }
+window.clearAllKeyframes = clearAllKeyframes;
 
 // ── Keyframe strip UI ──
 let selectedKeyframeT = null;
 
-function renderKeyframeStrip() {
-  const strip = document.getElementById('keyframe-strip');
-  if (!strip) return;
-
-  // Clear existing markers
-  strip.querySelectorAll('.kf-marker').forEach(el => el.remove());
-
-  STUDIO_CONFIG.keyframes.forEach(kf => {
-    const marker = document.createElement('div');
-    marker.className = 'kf-marker';
-    marker.style.cssText = [
-      'position: absolute',
-      'top: 50%',
-      'transform: translate(-50%, -50%) rotate(45deg)',
-      'width: 10px',
-      'height: 10px',
-      `left: ${kf.t * 100}%`,
-      `background: ${selectedKeyframeT === kf.t ? '#fff' : '#4a9eff'}`,
-      'border: 1.5px solid #fff',
-      'cursor: pointer',
-      'z-index: 10',
-      'transition: background 0.1s',
-    ].join(';');
-
-    marker.addEventListener('click', e => {
-      e.stopPropagation();
-      selectedKeyframeT = kf.t;
-      renderKeyframeStrip();
-      updateKeyframePanel(kf.t);
-      // Jump preview to this position
-      if (STUDIO_CONFIG.trekPath?.length >= 2 && window.studioAnimator) {
-        if (window.studioAnimator.preparePathData) {
-           window.studioAnimator.preparePathData();
-        }
-        window.studioAnimator.updateCamera(kf.t, 0); // instantly jump
-      }
-    });
-
-    marker.addEventListener('dblclick', e => {
-      e.stopPropagation();
-      if (confirm('Remove this keyframe?')) removeKeyframe(kf.t);
-    });
-
-    strip.appendChild(marker);
-  });
-}
-
-// ── Click on strip empty space to add keyframe ──
-function initKeyframeStripClickHandler() {
-  const strip = document.getElementById('keyframe-strip');
-  if (!strip) return;
-  strip.addEventListener('click', e => {
-    if (e.target.classList.contains('kf-marker')) return;
-    const rect = strip.getBoundingClientRect();
-    const t    = Math.max(0, Math.min((e.clientX - rect.left) / rect.width, 1));
-    // Jump camera to this position first
-    if (STUDIO_CONFIG.trekPath?.length >= 2 && window.studioAnimator) {
-      if (window.studioAnimator.preparePathData) {
-         window.studioAnimator.preparePathData();
-      }
-      window.studioAnimator.updateCamera(t, 0);
-    }
-    addKeyframe(t);
-  });
-}
-
 // ── Keyframe edit panel ──
 function updateKeyframePanel(t) {
-  const panel = document.getElementById('keyframe-edit-panel');
-  if (!panel) return;
   const kf = STUDIO_CONFIG.keyframes.find(k => Math.abs(k.t - t) < 0.005);
-  if (!kf) { hideKeyframePanel(); return; }
+  if (!kf) { window.closeContextPanel(); return; }
 
-  panel.style.display = 'block';
-  panel.innerHTML = `
-    <p class="section-label" style="margin-bottom:8px">
-      Keyframe @ ${(kf.t * 100).toFixed(0)}%
-      <button onclick="removeKeyframe(${kf.t})"
-        style="float:right; background:transparent; border:none; color:#ef4444;
-               cursor:pointer; font-size:11px">Remove</button>
-    </p>
-    ${kfSlider('Pitch',   'kf-pitch',   kf.pitch,       0,   75,  1)}
-    ${kfSlider('Zoom',    'kf-zoom',    kf.zoom,        8,   16,  0.5)}
-    ${kfSlider('Bearing', 'kf-bearing', kf.bearing,     0,  360,  1)}
-    ${kfSlider('Terrain', 'kf-terrain', kf.terrainExag, 1,    3,  0.1)}
-    ${kfSlider('Time',    'kf-timeOfDay', kf.timeOfDay || 12, 0, 24, 0.5)}
-    ${kfSlider('Fog',     'kf-fogDensity', kf.fogDensity !== undefined ? kf.fogDensity : 0.2, 0, 1, 0.05)}
-    <div class="control-row" style="margin-top:6px">
-      <label>Easing</label>
-      <select id="kf-easing" class="select-input-sm" style="width:120px">
-        ${['linear','ease-in','ease-out','ease-in-out','cut']
-          .map(e => `<option value="${e}" ${e===kf.easing?'selected':''}>${e}</option>`).join('')}
-      </select>
+  selectedKeyframeT = kf.t;
+
+  const htmlContent = `
+    <div class="kf-edit">
+      <p class="kf-edit__time">
+        Time position: ${(kf.t * STUDIO_CONFIG.duration).toFixed(1)}s (${(kf.t * 100).toFixed(0)}%)
+      </p>
+      <div class="kf-edit__fields">
+        ${kfSlider('Pitch',   'kf-pitch',   kf.pitch,       0,   75,  1)}
+        ${kfSlider('Zoom',    'kf-zoom',    kf.zoom,        8,   16,  0.5)}
+        ${kfSlider('Bearing', 'kf-bearing', kf.bearing,     0,  360,  1)}
+        ${kfSlider('Terrain', 'kf-terrain', kf.terrainExag, 1,    3,  0.1)}
+        ${kfSlider('Time',    'kf-timeOfDay', kf.timeOfDay || 12, 0, 24, 0.5)}
+        ${kfSlider('Fog',     'kf-fogDensity', kf.fogDensity !== undefined ? kf.fogDensity : 0.2, 0, 1, 0.05)}
+
+        <div class="kf-edit__easing">
+          <label>Easing</label>
+          <select id="kf-easing" class="select-input-sm kf-edit__easing-select">
+            ${['linear','ease-in','ease-out','ease-in-out','cut']
+              .map(e => `<option value="${e}" ${e===kf.easing?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="kf-edit__actions">
+        <button onclick="window.removeKeyframe(${kf.t}); window.closeContextPanel();"
+          class="btn-danger">
+          Delete
+        </button>
+        <button onclick="window.closeContextPanel()"
+          class="btn-accent">
+          Close
+        </button>
+      </div>
     </div>
   `;
+
+  window.openContextPanel(`Edit Keyframe`, htmlContent);
 
   // Wire live updates
   ['pitch','zoom','bearing','terrain','timeOfDay','fogDensity'].forEach(prop => {
@@ -272,26 +282,22 @@ function updateKeyframePanel(t) {
       }
     });
   });
+
   document.getElementById('kf-easing').addEventListener('change', e => {
     kf.easing = e.target.value;
   });
 }
+window.updateKeyframePanel = updateKeyframePanel;
 
 function kfSlider(label, id, value, min, max, step) {
   const suffix = label === 'Terrain' ? 'x' : (label === 'Time' ? 'h' : '°');
   return `
     <div class="slider-row">
-      <span>${label}</span>
+      <span class="slider-label">${label}</span>
       <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}">
-      <span class="val-out">${value}${suffix}</span>
+      <span class="val-out slider-label">${value}${suffix}</span>
     </div>
   `;
-}
-
-function hideKeyframePanel() {
-  const panel = document.getElementById('keyframe-edit-panel');
-  if (panel) panel.style.display = 'none';
-  selectedKeyframeT = null;
 }
 
 // ── Wire "Add Keyframe" button ──
@@ -299,10 +305,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const btn = document.getElementById('btn-add-keyframe');
   if (btn) btn.onclick = () => {
     // Current progress
-    const durationMs = STUDIO_CONFIG.duration * 1000;
-    // We don't have a global progress tracker easily available here, so default to 0 if not previewing
-    // However, if we scrub, animationProgress is local to animator.js.
-    // Let's rely on animator.js exporting progress if needed, or default to 0.
     const t = window.studioAnimator && window.studioAnimator.getProgress ? window.studioAnimator.getProgress() : 0;
     addKeyframe(t);
   };
@@ -311,11 +313,4 @@ document.addEventListener('DOMContentLoaded', () => {
   if (clearBtn) clearBtn.onclick = () => {
     if (confirm('Clear all keyframes?')) clearAllKeyframes();
   };
-
-  initKeyframeStripClickHandler();
-  renderKeyframeStrip();
 });
-
-window.addKeyframe    = addKeyframe;
-window.removeKeyframe = removeKeyframe;
-window.renderKeyframeStrip = renderKeyframeStrip;

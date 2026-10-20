@@ -1,0 +1,363 @@
+/* ════════════════════════════════════════════════════════════════════
+   MAPBOX VIDEO STUDIO — Generated-component classes
+   ────────────────────────────────────────────────────────────────────
+   Feature: pro-studio-overhaul · Task 13.2 · Requirement 5.2
+
+   Token-referencing CSS classes that replace the inline style="..."
+   previously embedded in dynamically generated markup:
+     - Keyframe edit panel   (js/keyframes.js · updateKeyframePanel/kfSlider)
+     - Waypoint editor + list (js/waypoint-builder.js)
+     - Encoder / export UI    (js/encoder.js · buildEncoderUI)
+
+   All values reference the design tokens defined in css/tokens.css. This
+   file is linked AFTER style.css and editor-mode.css so these component
+   classes resolve last in the cascade.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────
+   Shared action buttons (used by keyframe + waypoint panels)
+   ────────────────────────────────────────────── */
+.btn-danger {
+  flex: 1;
+  padding: var(--space-2);
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.btn-accent {
+  flex: 1;
+  padding: var(--space-2);
+  background: var(--accent-base);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.btn-accent:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+/* Wider variant (e.g. "Save name" sits beside a narrower Delete) */
+.btn-accent--wide { flex: 2; }
+
+/* ──────────────────────────────────────────────
+   Keyframe edit panel (js/keyframes.js)
+   ────────────────────────────────────────────── */
+.kf-edit { margin-bottom: var(--space-3); }
+
+.kf-edit__time {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.kf-edit__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.kf-edit__easing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  margin-top: var(--space-2);
+}
+
+.kf-edit__easing-select { width: 120px; }
+
+.kf-edit__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* Compact slider label used inside generated slider rows */
+.slider-label { font-size: var(--text-xs); }
+
+/* ──────────────────────────────────────────────
+   Waypoint editor (js/waypoint-builder.js)
+   ────────────────────────────────────────────── */
+.wp-edit__field { margin-bottom: var(--space-3); }
+
+.wp-edit__label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.wp-edit__input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px var(--space-2);
+  font-size: var(--text-base);
+}
+
+.wp-edit__meta {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.wp-edit__actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+
+.wp-edit__group { margin-bottom: var(--space-3); }
+
+.wp-edit__group-title {
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.wp-edit__group-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wp-edit__action-btn {
+  padding: 6px;
+  font-size: var(--text-xs);
+  justify-content: flex-start;
+}
+
+.wp-edit__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.wp-edit__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* ──────────────────────────────────────────────
+   Waypoint list (js/waypoint-builder.js · renderWaypointList)
+   ────────────────────────────────────────────── */
+.wp-list__empty {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: var(--space-2) 0;
+}
+
+.wp-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wp-list__clear {
+  font-size: 10px;
+  color: var(--danger);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 0;
+}
+
+.waypoint-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 0;
+  border-bottom: 0.5px solid var(--border);
+  cursor: pointer;
+}
+
+.waypoint-row__num {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--accent-base);
+  color: #fff;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.waypoint-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.waypoint-row__name {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 2px 0;
+}
+
+.waypoint-row__elev {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.waypoint-row__del {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-md);
+  padding: 2px;
+}
+
+/* ──────────────────────────────────────────────
+   Encoder / export UI (js/encoder.js · buildEncoderUI)
+   ────────────────────────────────────────────── */
+.encoder-modes {
+  display: flex;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.encoder-mode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.encoder-mode--disabled { color: var(--text-muted); }
+
+/* Amber "browser support" warning — one-off accent, no semantic token */
+.encoder-warn {
+  color: #F59E0B;
+  font-size: 10px;
+}
+
+.encoder-audio-row { margin-top: 6px; }
+
+.encoder-audio-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.encoder-audio-input {
+  font-size: var(--text-xs);
+  width: 100%;
+  background-image: none;
+}
+
+/* ──────────────────────────────────────────────
+   Obsidian Studio Component Classes (Phase 2)
+   ────────────────────────────────────────────── */
+
+/* Inspector Card */
+.inspector-card {
+  background: #121212;
+  border: 1px solid #262626;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Toggle Switch (Checkbox Replacement) */
+.toggle-switch {
+  appearance: none;
+  width: 32px;
+  height: 18px;
+  background: var(--bg-hover);
+  border-radius: 18px;
+  position: relative;
+  cursor: pointer;
+  outline: none;
+  border: 1px solid var(--border);
+  transition: background 160ms var(--ease-out), border-color 160ms var(--ease-out);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition: transform 160ms var(--ease-in-out), background 160ms var(--ease-in-out);
+}
+
+.toggle-switch:checked {
+  background: var(--accent-base);
+  border-color: var(--accent-base);
+}
+
+.toggle-switch:checked::after {
+  transform: translateX(14px);
+  background: #fff;
+}
+
+/* Data Chip */
+.data-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--bg-panel-section);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* Section Header */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+/* Panel Header */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-4);
+}
+
+.panel-header__title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}

@@ -68,15 +68,15 @@ function storyboardJump(id) {
   if (wp._t !== undefined && STUDIO_CONFIG.trekPath?.length >= 2) {
     const center = window.studioAnimator && window.studioAnimator.getPointAtProgress ? window.studioAnimator.getPointAtProgress(wp._t) : wp.lngLat;
     const cam    = window.interpolateCameraAtT ? window.interpolateCameraAtT(wp._t)
-                   : { pitch: map.getPitch(), zoom: map.getZoom(), bearing: map.getBearing() };
-    map.flyTo({ center, pitch: cam.pitch, zoom: cam.zoom, bearing: cam.bearing, speed: 1.5 });
+                   : { pitch: state.map.getPitch(), zoom: state.map.getZoom(), bearing: state.map.getBearing() };
+    state.map.flyTo({ center, pitch: cam.pitch, zoom: cam.zoom, bearing: cam.bearing, speed: 1.5 });
     
     // update animator progress
     if (window.studioAnimator) {
       window.studioAnimator.setProgress(wp._t);
     }
   } else {
-    map.flyTo({ center: wp.lngLat, speed: 1.5 });
+    state.map.flyTo({ center: wp.lngLat, speed: 1.5 });
   }
 
   // Open waypoint editor in context panel

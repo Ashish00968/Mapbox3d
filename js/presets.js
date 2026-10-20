@@ -73,13 +73,13 @@ savePresetBtn.addEventListener('click', () => {
   
   updatePresetDropdown();
   presetSelect.value = name;
-  alert(`Preset "${name}" saved!`);
+  if (window.updateStatus) window.updateStatus(`Preset "${name}" saved!`);
 });
 
 loadPresetBtn.addEventListener('click', () => {
   const name = presetSelect.value;
   if (!name) {
-    alert("Please select a preset to load.");
+    if (window.updateStatus) window.updateStatus('Please select a preset to load.');
     return;
   }
   

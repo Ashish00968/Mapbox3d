@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const p = PLATFORMS.find(x => x.id === pending.preset);
       if (p) {
         setTimeout(() => {
-          alert(`Reloaded for ${p.name} export. Please load your GPX file again to start the capture.`);
+          if (window.updateStatus) window.updateStatus(`Reloaded for ${p.name} export. Please load your GPX file again to start the capture.`);
         }, 500);
       }
     } catch (e) {

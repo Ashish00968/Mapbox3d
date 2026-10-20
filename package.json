@@ -1,0 +1,14 @@
+{
+  "name": "mapbox-video-studio-devtests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DEV-ONLY test toolchain for Mapbox Video Studio. The shipped app has NO build step and does NOT use this package. These dev dependencies exist only to run the no-build ES-module test runner (node --test + jsdom + fast-check) against the same js/*.js modules the app ships. No bundler or transpiler is introduced for the application.",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "fast-check": "^3.23.1",
+    "jsdom": "^25.0.1"
+  }
+}

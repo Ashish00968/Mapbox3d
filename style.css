@@ -1,36 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
 /* ════════════════════════════════════════════
    MAPBOX VIDEO STUDIO — Cinematic Design System
    ════════════════════════════════════════════ */
 
 :root {
-  /* ── Earth Studio / Premium Dark Palette ── */
-  --bg-base: #0B0B0C;
-  --bg-panel: rgba(18, 18, 20, 0.85);
-  --bg-panel-section: rgba(255, 255, 255, 0.03);
-  --bg-hover: rgba(255, 255, 255, 0.08);
+  /* ── Obsidian Studio / Premium Dark Palette ── */
+  --bg-base: #131313;
+  --bg-panel: #1c1b1b;
+  --bg-panel-section: #1e1e1e;
+  --bg-hover: #2a2a2a;
 
-  --accent-base: #3B82F6;
-  --accent-hover: #60A5FA;
-  --accent-glow: rgba(59, 130, 246, 0.3);
+  --accent-base: #007AFF;
+  --accent-hover: #3395FF;
+  --accent-glow: rgba(0, 122, 255, 0.25);
   
   --accent-green-base: #10B981;
   --accent-green-hover: #34D399;
 
-  --text-primary: #EDEDED;
-  --text-secondary: #A1A1AA;
-  --text-muted: #71717A;
+  --text-primary: #e5e2e1;
+  --text-secondary: #c1c6d7;
+  --text-muted: #8b90a0;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(255, 255, 255, 0.2);
+  --border: #414755;
+  --border-focus: #8b90a0;
   
   /* ── Emil's Animation Easing Curves ── */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  --radius-sm: 4px;
+  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
 }
@@ -65,12 +65,9 @@ html, body {
   width: var(--panel-left-width);
   flex-shrink: 0;
   background: var(--bg-panel);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
   z-index: 10;
 }
 
@@ -136,12 +133,17 @@ html, body {
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
 /* ── Panel Sections ── */
-.panel-section {
+fieldset.panel-section, .panel-section {
   padding: 20px;
   border-bottom: 1px solid var(--border);
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  margin: 0;
+  min-width: 0;
 }
 
-.section-label {
+legend.section-label, .section-label {
   display: block;
   font-size: 11px;
   font-weight: 600;
@@ -149,6 +151,8 @@ html, body {
   letter-spacing: 0.1em;
   color: var(--text-secondary);
   margin-bottom: 12px;
+  padding: 0;
+  width: 100%;
 }
 
 /* ── Floating map toolbar ── */
@@ -291,7 +295,7 @@ html, body {
   align-items: center;
   justify-content: space-between;
   padding: 0 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   z-index: 10;
@@ -328,7 +332,7 @@ html, body {
 }
 
 #frame-counter {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
   font-size: 10px;
   color: rgba(255, 255, 255, 0.5);
   margin-top: 4px;
@@ -390,7 +394,7 @@ input[type="range"]::-webkit-slider-thumb:active {
 .val-out {
   min-width: 44px;
   text-align: right;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
   font-size: 11px;
   color: var(--text-primary);
   background: var(--bg-panel-section);
@@ -407,7 +411,7 @@ input[type="range"]::-webkit-slider-thumb:active {
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: border-color 0.3s ease, background 0.3s ease, color 0.3s ease;
   background: rgba(255, 255, 255, 0.01);
   display: flex;
   flex-direction: column;
@@ -521,7 +525,7 @@ input[type="range"]::-webkit-slider-thumb:active {
 .num-input {
   width: 64px;
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
 }
 .num-input::-webkit-inner-spin-button,
 .num-input::-webkit-outer-spin-button {
@@ -646,7 +650,7 @@ button:active:not(:disabled),
   font-weight: 500;
   cursor: pointer;
   color: var(--text-secondary);
-  transition: all 0.15s var(--ease-out);
+  transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
   user-select: none;
 }
 
@@ -724,7 +728,7 @@ button:active:not(:disabled),
 .stat-val {
   color: var(--text-primary);
   font-weight: 500;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
 }
 
 .duration-row {
@@ -774,7 +778,7 @@ input[type="checkbox"] {
   background: var(--bg-panel-section);
   padding: 12px;
   border-radius: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: 'Geist Mono', monospace;
   font-size: 11px;
   color: var(--accent-green-base);
   word-break: break-all;
@@ -788,8 +792,8 @@ input[type="checkbox"] {
    ════════════════════════════════════════════════════════════ */
 
 .timeline-workspace {
-  background: #111113; /* slightly distinct from body bg */
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border);
   position: relative;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
   z-index: 100;
@@ -803,8 +807,8 @@ input[type="checkbox"] {
 
 .timeline-header {
   padding: 8px 16px;
-  background: #18181A;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-panel-section);
+  border-bottom: 1px solid var(--border);
   
   /* Restored Layout Properties */
   display: flex;
@@ -814,8 +818,8 @@ input[type="checkbox"] {
 
 .timeline-track-headers {
   width: 220px;
-  background: #161618;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: hidden;
@@ -844,7 +848,7 @@ input[type="checkbox"] {
   overflow-x: auto;
   overflow-y: hidden;
   position: relative;
-  background: #0B0B0C;
+  background: var(--bg-base);
   /* Nice grid pattern for the timeline background */
   background-image: 
     linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
@@ -1086,4 +1090,10 @@ input[type="checkbox"] {
   -webkit-backdrop-filter: blur(6px);
   -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%);
   mask-image: linear-gradient(to bottom, black 0%, transparent 20%, transparent 80%, black 100%);
+}
+
+/* ── Accessibility: High contrast focus visible (Req 7.2) ── */
+*:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: 2px;
 }

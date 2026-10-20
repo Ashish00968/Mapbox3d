@@ -1,53 +1,56 @@
 import { STUDIO_CONFIG, state } from './store.js';
+import { Studio, EVENTS } from './event-bus.js';
 
 /* ════════════════════════════════════════════════════════════
    MAPBOX VIDEO STUDIO — map.js (Phase 1)
    Core map init, terrain, camera sliders, global config.
    ════════════════════════════════════════════════════════════ */
 
-// === GLOBAL CONFIG — read/written by all future phase scripts ===
-Object.assign(STUDIO_CONFIG, {
-  resolution: '4K',
-  pixelRatio: 2,           // 1 = 1080p, 1.5 = 2K, 2 = 4K
-  fps: 30,
-  duration: 30,
-  pitch: 60,
-  zoom: 12,
-  terrainExaggeration: 1.8,
-  mapStyle: 'satellite-streets-v12',
-  waypoints: [],           // [{id, lngLat:[lng,lat], name, elevation, triggers:[]}]
-  trekPath: null,          // [lng, lat][] — populated by gpx-parser.js (Phase 2)
-  // Phase 3 additions:
-  bearingMode: 'follow',   // 'follow' or 'rotate'
-  bearingSpeed: 10,        // degrees per second (for rotate mode)
-  altitudeOffset: 500,     // height above ground in meters
-  lookAhead: 5,            // points to look ahead for bearing calc
-  smoothing: 0.85,         // path smoothing factor (0 = raw, 1 = max)
-  easing: 'ease-in-out'    // camera progress easing
-});
-
-const PIXEL_RATIOS = { '1080p': 1, '2K': 1.5, '4K': 2 };
+// === GLOBAL CONFIG ===
+// All runtime defaults, presets, and the Mapbox token live in store.js
+// (Configuration_Manager — Req 8.1, 8.4). map.js no longer redefines defaults
+// via Object.assign; it READS them from STUDIO_CONFIG / STUDIO_CONFIG.presets.
 
 // ─────────────────────────────────────────────
-// TOKEN — from travelglb/.env
+// TOKEN — read from the single centralized config source (Req 8.1)
 // ─────────────────────────────────────────────
-mapboxgl.accessToken = 'YOUR_MAPBOX_TOKEN';
+mapboxgl.accessToken = STUDIO_CONFIG.mapboxToken;
 
 // ─────────────────────────────────────────────
 // MAP INIT
 // preserveDrawingBuffer: true is NON-NEGOTIABLE.
 // Without it, canvas.toDataURL() returns blank PNGs.
 // Cannot be added after init.
+// Initial view comes from the centralized map defaults (Req 8.4).
 // ─────────────────────────────────────────────
+const mapDefaults = STUDIO_CONFIG.presets.mapDefaults;
 const map = new mapboxgl.Map({
   container: 'map',
   style: `mapbox://styles/mapbox/${STUDIO_CONFIG.mapStyle}`,
-  center: [77.1025, 32.2432],   // Default: Himachal Pradesh
-  zoom: STUDIO_CONFIG.zoom,
-  pitch: STUDIO_CONFIG.pitch,
-  bearing: 0,
+  center: mapDefaults.center,   // Default: Himachal Pradesh [77.1025, 32.2432]
+  zoom: mapDefaults.zoom,
+  pitch: mapDefaults.pitch,
+  bearing: mapDefaults.bearing,
   preserveDrawingBuffer: true,  // ⚠️ CRITICAL — frame capture depends on this
   antialias: true,
+});
+window.map = map;
+
+// ─────────────────────────────────────────────
+// AUTH / TOKEN ERROR SURFACING (Req 8.5)
+// If the Mapbox token is missing or rejected, surface a descriptive status
+// error so the user knows the map could not be authenticated.
+// ─────────────────────────────────────────────
+map.on('error', (e) => {
+  const err = e && e.error;
+  const status = err && (err.status || err.statusCode);
+  const haystack = `${status || ''} ${err ? (err.message || String(err)) : ''}`;
+  if (status === 401 || status === 403 || /401|403|token|unauthorized/i.test(haystack)) {
+    Studio.bus.emit(EVENTS.STATUS, {
+      level: 'error',
+      message: 'Map could not be authenticated — check the Mapbox token.'
+    });
+  }
 });
 
 // Nav controls — bottom right, out of the way
@@ -197,6 +200,7 @@ map.on('load', () => {
   updateCanvasSizeDisplay();
   updateFrameCount();
   console.log('[Video Studio] Map loaded — terrain active, preserveDrawingBuffer:', map.getCanvas().getContext('webgl2')?.getContextAttributes()?.preserveDrawingBuffer ?? 'check webgl1');
+  document.dispatchEvent(new CustomEvent('map-ready'));
 });
 
 // ─────────────────────────────────────────────
@@ -205,7 +209,7 @@ map.on('load', () => {
 document.querySelectorAll('input[name="resolution"]').forEach(radio => {
   radio.addEventListener('change', (e) => {
     STUDIO_CONFIG.resolution = e.target.value;
-    STUDIO_CONFIG.pixelRatio = PIXEL_RATIOS[e.target.value];
+    STUDIO_CONFIG.pixelRatio = STUDIO_CONFIG.presets.resolution[e.target.value];
     updateCanvasSizeDisplay();
   });
 });
@@ -374,6 +378,9 @@ function updateFrameCount() {
   const total = fps * dur;
   const el = document.getElementById('total-frames-out');
   if (el) el.textContent = `${total.toLocaleString()} frames`;
+  if (window.updateTimelineDuration) {
+    window.updateTimelineDuration(dur);
+  }
 }
 
 document.getElementById('fps-select').addEventListener('change', updateFrameCount);

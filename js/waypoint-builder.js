@@ -1,4 +1,9 @@
 import { STUDIO_CONFIG, state } from './store.js';
+import { pathDistanceKm } from './geo.js';
+import Studio from './event-bus.js';
+// Side-effect import: registers Studio.route.buildTrekPath / buildStraightLinePath
+// so this module can build the Trek_Path through the routing dispatcher (Req 3.1, 3.8).
+import './routing.js';
 
 // ── State ──
 let waypointMode = false;
@@ -18,15 +23,11 @@ function toggleWaypointMode(active) {
 window.toggleWaypointMode = toggleWaypointMode;
 
 // ── Map click handler — place waypoint ──
+document.addEventListener('map-ready', () => {
+  if (state.map) state.map.on('click', handleMapClick);
+});
 if (state.map) {
   state.map.on('click', handleMapClick);
-} else {
-  // If map is not initialized yet, wait for load
-  document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-      if (state.map) state.map.on('click', handleMapClick);
-    }, 1000);
-  });
 }
 
 function handleMapClick(e) {
@@ -45,7 +46,6 @@ function handleMapClick(e) {
   openWaypointEditor(waypoint);
   document.dispatchEvent(new CustomEvent('waypoints-changed'));
 
-  // Exit mode after placing (single-place workflow)
   // Exit mode after placing (single-place workflow)
   toggleWaypointMode(false);
 }
@@ -80,7 +80,7 @@ function placeWaypointMarker(wp) {
 
   const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
     .setLngLat(wp.lngLat)
-    .addTo(map);
+    .addTo(state.map);
 
   waypointMarkers[wp.id] = marker;
 
@@ -109,9 +109,54 @@ function fetchElevation(lngLat) {
   });
 }
 
-// ── Rebuild the trek path GeoJSON from waypoints in order ──
+// ── Rebuild the trek path from waypoints, ALWAYS in array order ──
+//
+// The Trek_Path is rebuilt by mapping STUDIO_CONFIG.waypoints in array order on
+// every add/delete/reorder, so the path order mirrors the waypoint-array order
+// exactly (Req 3.8). Building goes through the routing dispatcher
+// (Studio.route.buildTrekPath) so the configured routing mode is honored:
+//   • 'straight-line'  -> synchronous geodesic path (snappy)
+//   • 'road-and-trail' -> may return a Promise (async snapped route)
+// We therefore tolerate both a plain array and a thenable return value.
 function rebuildTrekPath() {
-  const coords = STUDIO_CONFIG.waypoints.map(w => w.lngLat);
+  const waypoints = STUDIO_CONFIG.waypoints;
+  const routing = STUDIO_CONFIG.routing || {};
+  const mode = routing.mode || 'straight-line';
+  const profile = routing.profile;
+
+  // Direct, order-preserving fallback if the router is unavailable or throws
+  // (e.g. a not-yet-implemented mode). Mirrors the waypoint array exactly.
+  const directCoords = () => waypoints.map(w => w.lngLat);
+
+  let result;
+  try {
+    if (Studio.route && typeof Studio.route.buildTrekPath === 'function') {
+      result = Studio.route.buildTrekPath(waypoints, { mode, profile });
+    } else {
+      result = directCoords();
+    }
+  } catch (err) {
+    console.warn('[waypoint-builder] routing build failed; using direct order', err);
+    result = directCoords();
+  }
+
+  if (result && typeof result.then === 'function') {
+    // Async mode (road-and-trail): apply when the snapped route resolves.
+    result
+      .then(coords => applyTrekPath(Array.isArray(coords) ? coords : directCoords()))
+      .catch(err => {
+        console.warn('[waypoint-builder] async routing failed; using direct order', err);
+        applyTrekPath(directCoords());
+      });
+  } else {
+    applyTrekPath(Array.isArray(result) ? result : directCoords());
+  }
+}
+window.rebuildTrekPath = rebuildTrekPath;
+
+// ── Apply a freshly built Trek_Path: update config, the map source, and notify ──
+function applyTrekPath(coords) {
+  coords = Array.isArray(coords) ? coords : [];
   STUDIO_CONFIG.trekPath = coords;  // existing coordAtProgress reads this
 
   // Remove and re-add the trek path layers
@@ -128,100 +173,97 @@ function rebuildTrekPath() {
     window.redrawTrekPath();
   }
 
-  // Update trek stats
-  if (coords.length >= 2) {
-    const km = calcDistanceKm(coords).toFixed(1);
-    updateStatus(coords.length + ' waypoints · ' + km + ' km');
-  }
+  // Announce the change; the trek-changed listener recomputes distance (Req 3.6).
+  Studio.bus.emit(Studio.events.TREK_CHANGED, { trekPath: coords });
 }
-window.rebuildTrekPath = rebuildTrekPath;
 
-// ── Haversine distance (same as gpx-parser.js — keep DRY by sharing via window) ──
-function calcDistanceKm(coords) {
-  let total = 0;
-  for (let i = 1; i < coords.length; i++) {
-    const [lng1, lat1] = coords[i - 1];
-    const [lng2, lat2] = coords[i];
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 +
-              Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-    total += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+// ── On every trek change, recompute total distance (km) and update displays ──
+// (Req 3.6) Distance is derived once, here, from the current Trek_Path via the
+// single geo.js implementation, then mirrored into STUDIO_CONFIG and the status
+// bar / distance overlay so all surfaces agree.
+Studio.bus.on(Studio.events.TREK_CHANGED, () => {
+  const coords = STUDIO_CONFIG.trekPath || [];
+  const km = pathDistanceKm(coords);
+
+  STUDIO_CONFIG.trekDistanceKm = km;
+  if (STUDIO_CONFIG.overlays && STUDIO_CONFIG.overlays.distance) {
+    STUDIO_CONFIG.overlays.distance.totalKm = km;
   }
-  return total;
+
+  if (coords.length >= 2 && window.updateStatus) {
+    window.updateStatus(STUDIO_CONFIG.waypoints.length + ' waypoints · ' + km.toFixed(1) + ' km');
+  }
+});
+
+// ── Total path distance in km — consolidated into geo.js ──
+function calcDistanceKm(coords) {
+  return pathDistanceKm(coords);
 }
 window.calcDistanceKm = calcDistanceKm;
 
 // ── Open waypoint editor in context panel ──
 function openWaypointEditor(wp) {
+  if (Studio && Studio.bus) {
+    Studio.bus.emit(Studio.events.SELECTION_CHANGED, { kind: 'waypoint', id: wp.id });
+  }
   const elev = wp.elevation ? wp.elevation + 'm' : '—';
   window.openContextPanel('Waypoint', `
-    <div style="margin-bottom:12px">
-      <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px">Name</label>
-      <input id="wp-name-input" type="text" value="${wp.name}"
-        style="width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--border);
-               color:var(--text-primary); border-radius:4px; padding:6px 8px; font-size:13px">
+    <div class="wp-edit__field">
+      <label class="wp-edit__label">Name</label>
+      <input id="wp-name-input" type="text" value="${wp.name}" class="wp-edit__input">
     </div>
-    <p style="font-size:11px; color:var(--text-muted); margin-bottom:12px">
+    <p class="wp-edit__meta">
       Elevation: ${elev} &nbsp;·&nbsp;
       ${wp.lngLat[1].toFixed(4)}, ${wp.lngLat[0].toFixed(4)}
     </p>
-    <div style="display:flex; gap:6px; margin-bottom:12px">
-      <button onclick="deleteWaypoint('${wp.id}')"
-        style="flex:1; padding:7px; background:transparent; border:1px solid var(--danger);
-               color:var(--danger); border-radius:6px; cursor:pointer; font-size:12px">
+    <div class="wp-edit__actions">
+      <button onclick="deleteWaypoint('${wp.id}')" class="btn-danger">
         Delete
       </button>
-      <button onclick="confirmWaypointName('${wp.id}')"
-        style="flex:2; padding:7px; background:var(--accent-base); border:none;
-               color:#fff; border-radius:6px; cursor:pointer; font-size:12px">
+      <button onclick="confirmWaypointName('${wp.id}')" class="btn-accent btn-accent--wide">
         Save name
       </button>
     </div>
-    
-    <div style="margin-bottom:12px">
-      <p style="font-size:10px; font-weight:500; color:var(--text-muted);
-                text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px">
+
+    <div class="wp-edit__group">
+      <p class="wp-edit__group-title">
         Camera Actions
       </p>
-      <div style="display:flex; flex-direction:column; gap:6px">
+      <div class="wp-edit__group-stack">
         <button onclick="if(window.flyAndZoomToWaypoint) window.flyAndZoomToWaypoint('${wp.id}')"
-          class="btn-ghost" style="padding:6px; font-size:11px; justify-content:flex-start">
+          class="btn-ghost wp-edit__action-btn">
           <i class="ti ti-zoom-in"></i> Fly & Zoom Here
         </button>
         <button onclick="if(window.storyboardJump) window.storyboardJump('${wp.id}')"
-          class="btn-ghost" style="padding:6px; font-size:11px; justify-content:flex-start">
+          class="btn-ghost wp-edit__action-btn">
           <i class="ti ti-focus-2"></i> Jump Camera Here
         </button>
         <button onclick="window.addKeyframeAtWaypoint('${wp.id}')"
-          class="btn-ghost" style="padding:6px; font-size:11px; justify-content:flex-start">
+          class="btn-ghost wp-edit__action-btn">
           <i class="ti ti-camera-plus"></i> Add Keyframe Here
         </button>
         <button onclick="window.createOrbitAtWaypoint('${wp.id}')"
-          class="btn-ghost" style="padding:6px; font-size:11px; justify-content:flex-start">
+          class="btn-ghost wp-edit__action-btn">
           <i class="ti ti-rotate-360"></i> Create Orbit Segment
         </button>
       </div>
     </div>
-    
-    <div style="margin-bottom:12px">
-      <p style="font-size:10px; font-weight:500; color:var(--text-muted);
-                text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px">
+
+    <div class="wp-edit__group">
+      <p class="wp-edit__group-title">
         Path Actions
       </p>
-      <label style="display:flex; align-items:center; gap:8px; font-size:12px; cursor:pointer">
+      <label class="wp-edit__check">
         <input type="checkbox" onchange="window.toggleSegmentEnd('${wp.id}', this.checked)" ${wp.endSegment ? 'checked' : ''}>
         End Segment Here (Break line)
       </label>
     </div>
 
     <div id="wp-trigger-section">
-      <p style="font-size:10px; font-weight:500; color:var(--text-muted);
-                text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px">
+      <p class="wp-edit__group-title">
         Animation triggers
       </p>
-      <p style="font-size:11px; color:var(--text-muted)">
+      <p class="wp-edit__hint">
         Phase 19 will add triggers here.
       </p>
     </div>
@@ -330,26 +372,20 @@ function renderWaypointList() {
   const wps = STUDIO_CONFIG.waypoints;
 
   if (wps.length === 0) {
-    container.innerHTML = '<p style="font-size:11px; color:var(--text-muted); padding:8px 0">No waypoints yet — click 📍 to add one, or upload a GPX file.</p>';
+    container.innerHTML = '<p class="wp-list__empty">No waypoints yet — click 📍 to add one, or upload a GPX file.</p>';
     return;
   }
 
   container.innerHTML = wps.map((wp, i) => `
     <div class="waypoint-row" data-id="${wp.id}"
-      style="display:flex; align-items:center; gap:8px; padding:6px 0;
-             border-bottom:0.5px solid var(--border); cursor:pointer"
       onclick="openWaypointEditorById('${wp.id}')">
-      <div style="width:20px; height:20px; border-radius:50%; background:var(--accent-base);
-                  color:#fff; font-size:10px; font-weight:600; display:flex;
-                  align-items:center; justify-content:center; flex-shrink:0">${i+1}</div>
-      <div style="flex:1; min-width:0">
-        <p style="font-size:12px; color:var(--text-primary); white-space:nowrap;
-                  overflow:hidden; text-overflow:ellipsis; margin: 0 0 2px 0;">${wp.name}</p>
-        <p style="font-size:10px; color:var(--text-muted); margin: 0;">${wp.elevation ? wp.elevation + 'm' : '—'}</p>
+      <div class="waypoint-row__num">${i+1}</div>
+      <div class="waypoint-row__body">
+        <p class="waypoint-row__name">${wp.name}</p>
+        <p class="waypoint-row__elev">${wp.elevation ? wp.elevation + 'm' : '—'}</p>
       </div>
       <button onclick="event.stopPropagation(); deleteWaypoint('${wp.id}')"
-        style="background:transparent; border:none; color:var(--text-muted);
-               cursor:pointer; font-size:14px; padding:2px">
+        class="waypoint-row__del">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
     </div>
@@ -374,11 +410,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const listSection = document.createElement('div');
     listSection.className = 'panel-section';
     listSection.innerHTML = `
-      <div class="section-label" style="display:flex; align-items:center; justify-content:space-between">
+      <div class="section-label wp-list__header">
         WAYPOINTS
         <button onclick="clearAllWaypoints()"
-          style="font-size:10px; color:var(--danger); background:transparent;
-                 border:none; cursor:pointer; text-transform:none; letter-spacing:0; padding:0;">Clear all</button>
+          class="wp-list__clear">Clear all</button>
       </div>
       <div id="waypoint-list"></div>
     `;
@@ -407,7 +442,10 @@ function clearAllWaypoints() {
   if (state.map && state.map.getLayer('trek-line')) state.map.removeLayer('trek-line');
   if (state.map && state.map.getLayer('trek-glow')) state.map.removeLayer('trek-glow');
   if (state.map && state.map.getSource('trek-path')) state.map.removeSource('trek-path');
-  
+
+  // Notify: trek is now empty so distance recomputes to 0 (Req 3.6, 3.8).
+  Studio.bus.emit(Studio.events.TREK_CHANGED, { trekPath: [] });
+
   updateStatus('Waypoints cleared');
 }
 window.clearAllWaypoints = clearAllWaypoints;

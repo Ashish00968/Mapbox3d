@@ -208,7 +208,7 @@ function addSegment() {
 
 function removeActiveSegment() {
   const segs = STUDIO_CONFIG.timeline.segments;
-  if (segs.length <= 1) { alert('Cannot remove the last segment'); return; }
+  if (segs.length <= 1) { if (window.updateStatus) window.updateStatus('Cannot remove the last segment'); return; }
   const id  = STUDIO_CONFIG.timeline.activeSegmentId;
   STUDIO_CONFIG.timeline.segments = segs.filter(s => s.id !== id);
   STUDIO_CONFIG.timeline.activeSegmentId = STUDIO_CONFIG.timeline.segments[0].id;

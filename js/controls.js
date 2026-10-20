@@ -175,6 +175,44 @@ smoothingSlider?.addEventListener('input', e => {
     if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
   });
 
+  document.getElementById('toggle-compass')?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.compass.enabled = e.target.checked;
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
+  document.getElementById('toggle-vignette')?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.vignette.enabled = e.target.checked;
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
+  document.getElementById('toggle-letterbox')?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.letterbox.enabled = e.target.checked;
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
+  const lutToggle = document.getElementById('toggle-lut');
+  const lutSettings = document.getElementById('lut-settings');
+  lutToggle?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.lut.enabled = e.target.checked;
+    if (lutSettings) lutSettings.style.display = e.target.checked ? 'block' : 'none';
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
+  document.getElementById('lut-type')?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.lut.type = e.target.value;
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
+  document.getElementById('toggle-tiltshift')?.addEventListener('change', e => {
+    STUDIO_CONFIG.overlays.tiltShift.enabled = e.target.checked;
+    const canvas = document.getElementById('overlay-canvas');
+    if (canvas) {
+      if (e.target.checked) canvas.classList.add('tilt-shift');
+      else canvas.classList.remove('tilt-shift');
+    }
+    if (window.compositeOverlays) window.compositeOverlays(STUDIO_CONFIG.currentProgress || 0);
+  });
+
   // ── Map Layer Toggles ──
   document.getElementById('toggle-labels')?.addEventListener('change', e => {
     STUDIO_CONFIG.mapLayers.labels = e.target.checked;

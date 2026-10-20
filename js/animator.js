@@ -1,4 +1,8 @@
 import { STUDIO_CONFIG, state } from './store.js';
+import { haversineDistance } from './geo.js';
+import { Studio, EVENTS } from './event-bus.js';
+import { validateForOperation, describeMissingInputs } from './validation.js';
+import { sampleCamera } from './camera-sampler.js';
 
 /* ════════════════════════════════════════════════════════════
    MAPBOX VIDEO STUDIO — animator.js (Phase 4)
@@ -25,18 +29,80 @@ const easings = {
   'ease-out': t => t * (2 - t)
 };
 
+/* ────────────────────────────────────────────────────────────
+   Time-proportional progress advance (Req 2.4)
+
+   Preview must advance animation progress proportional to elapsed
+   REAL time so playback speed is independent of the achieved frame
+   rate: progress += dt / durationMs. A single slow frame (long stall
+   or tab-switch) would otherwise push the camera a large distance in
+   one step, so dt is clamped to MAX_FRAME_DT_MS before it is applied.
+
+   `advanceProgress` is intentionally PURE (no DOM, no map, no globals)
+   so it is importable directly in the no-build test runner — this is
+   the function Property 8 (task 4.9) exercises.
+   ──────────────────────────────────────────────────────────── */
+
+// Largest single-frame delta (ms) honored when advancing progress.
+// Anything larger is treated as a stall and clamped to this ceiling.
+export const MAX_FRAME_DT_MS = 100;
+
+/**
+ * Advance normalized animation progress by elapsed real time.
+ * @param {number} progress   current progress in [0, 1]
+ * @param {number} dt         elapsed wall-clock time since the last frame, ms
+ * @param {number} durationMs total animation duration, ms (> 0)
+ * @returns {number} next progress, clamped to [0, 1]
+ */
+export function advanceProgress(progress, dt, durationMs) {
+  // Guard against a missing/degenerate duration: progress cannot advance.
+  if (!(durationMs > 0) || !isFinite(durationMs)) {
+    return progress < 0 ? 0 : progress > 1 ? 1 : progress;
+  }
+  // Clamp dt to the stall ceiling and ignore negative/non-finite deltas.
+  let clampedDt = dt;
+  if (!isFinite(clampedDt) || clampedDt < 0) clampedDt = 0;
+  if (clampedDt > MAX_FRAME_DT_MS) clampedDt = MAX_FRAME_DT_MS;
+
+  let next = progress + clampedDt / durationMs;
+  if (next > 1) next = 1;
+  if (next < 0) next = 0;
+  return next;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Redundant-update suppression (Req 6.6)
+
+   Terrain, fog, and time-of-day style writes are expensive Mapbox
+   operations. We only apply them when the underlying value actually
+   moved beyond a configured threshold, so identical/within-threshold
+   values never trigger a style write (idempotent under unchanged
+   configuration). The thresholds live in STUDIO_CONFIG.presets
+   .updateThresholds (terrain/fog/timeOfDay) — see store.js.
+
+   `shouldWrite` is intentionally PURE (no DOM, no map, no globals) so
+   it is importable directly in the no-build test runner — this is the
+   function Property 18 (task 7.5) exercises.
+   ──────────────────────────────────────────────────────────── */
+
+/**
+ * Decide whether a value change is large enough to warrant a style write.
+ * @param {number} oldVal   previously applied value
+ * @param {number} newVal   candidate new value
+ * @param {number} threshold non-negative suppression threshold
+ * @returns {boolean} true iff |newVal - oldVal| > threshold (equal values => false)
+ */
+export function shouldWrite(oldVal, newVal, threshold) {
+  return Math.abs(newVal - oldVal) > threshold;
+}
+
 // Math helpers
 function toRad(deg) { return deg * Math.PI / 180; }
 function toDeg(rad) { return rad * 180 / Math.PI; }
 
-// Haversine distance
+// Haversine distance (meters) — consolidated into geo.js
 function getDistance(p1, p2) {
-  const R = 6371e3; // metres
-  const φ1 = toRad(p1[1]), φ2 = toRad(p2[1]);
-  const Δφ = toRad(p2[1] - p1[1]), Δλ = toRad(p2[0] - p1[0]);
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+  return haversineDistance(p1, p2);
 }
 
 // Compute path distances and cumulative distances for constant speed mapping
@@ -95,9 +161,11 @@ window._lastTerrainExag = STUDIO_CONFIG.terrainExaggeration || 1.8;
 function updateCamera(t, dt, seg = null, localT = 0) {
   const config = STUDIO_CONFIG;
   
-  // If we have keyframes, use them!
-  if (window.interpolateCameraAtT && config.keyframes && config.keyframes.length > 0) {
-    const cam = window.interpolateCameraAtT(t);
+  // Use the canonical camera sampler for Preview/Export parity (Req 2.6, task 4.5).
+  // Both the preview RAF loop and the export capture loop now call sampleCamera(t)
+  // so the same t value produces the identical camera state in both paths.
+  if (config.keyframes && config.keyframes.length > 0) {
+    const cam = sampleCamera(t);
     
     if (config.cameraTarget) {
       cam.bearing = getBearing(cam.center, config.cameraTarget);
@@ -115,8 +183,9 @@ function updateCamera(t, dt, seg = null, localT = 0) {
       window.updateTrackerPosition(cam.center, cam.bearing);
     }
     
-    // Only update terrain if terrainExag changed significantly
-    if (Math.abs(cam.terrainExag - window._lastTerrainExag) > 0.05) {
+    // Only update terrain if terrainExag changed beyond the configured threshold
+    const thresholds = config.presets.updateThresholds;
+    if (shouldWrite(window._lastTerrainExag, cam.terrainExag, thresholds.terrain)) {
       state.map.setTerrain({ source: 'mapbox-dem', exaggeration: cam.terrainExag });
       window._lastTerrainExag = cam.terrainExag;
     }
@@ -124,7 +193,7 @@ function updateCamera(t, dt, seg = null, localT = 0) {
     // Update Time of Day & Fog
     let envChanged = false;
     
-    if (cam.timeOfDay !== undefined && Math.abs(config.timeOfDay - cam.timeOfDay) > 0.1) {
+    if (cam.timeOfDay !== undefined && shouldWrite(config.timeOfDay, cam.timeOfDay, thresholds.timeOfDay)) {
       config.timeOfDay = cam.timeOfDay;
       envChanged = true;
       
@@ -134,7 +203,7 @@ function updateCamera(t, dt, seg = null, localT = 0) {
       if (timeVal) timeVal.innerText = cam.timeOfDay.toFixed(1);
     }
     
-    if (cam.fogDensity !== undefined && Math.abs((config.fogDensity || 0.2) - cam.fogDensity) > 0.02) {
+    if (cam.fogDensity !== undefined && shouldWrite(config.fogDensity || 0.2, cam.fogDensity, thresholds.fog)) {
       config.fogDensity = cam.fogDensity;
       envChanged = true;
       
@@ -180,7 +249,10 @@ function stopAnimation() {
     cancelAnimationFrame(rafId);
   }
   if (playPauseBtn) playPauseBtn.innerHTML = '<i class="ti ti-player-play"></i>';
-  previewBtn.disabled = false;
+  if (window.setStudioBusy) window.setStudioBusy(false);
+  
+  const stopBtnMap = document.getElementById('btn-stop');
+  if (stopBtnMap) stopBtnMap.style.display = 'none';
   
   // Reset camera to start
   if (STUDIO_CONFIG.keyframes && STUDIO_CONFIG.keyframes.length > 0) {
@@ -199,7 +271,10 @@ function stopAnimation() {
 }
 
 function togglePause() {
-  if (!isPreviewing) return;
+  if (!isPreviewing) {
+    startPreview();
+    return;
+  }
   isPaused = !isPaused;
   if (playPauseBtn) {
     playPauseBtn.innerHTML = isPaused ? '<i class="ti ti-player-play"></i>' : '<i class="ti ti-player-pause"></i>';
@@ -222,19 +297,25 @@ function animate(timestamp) {
   if (isPaused) return; 
   
   if (!lastTimestamp) lastTimestamp = timestamp;
-  const dt = timestamp - lastTimestamp;
+  const rawDt = timestamp - lastTimestamp;
   lastTimestamp = timestamp;
-  
+
   const config = STUDIO_CONFIG;
-  let durationMs = config.duration * 1000;
-  
-  animationProgress += dt / durationMs;
-  
+  const durationMs = config.duration * 1000;
+
+  // Clamp dt so a long stall / tab-switch doesn't make the camera jump,
+  // then reuse the same clamped value for any dt-driven camera motion.
+  const dt = Math.min(Math.max(rawDt, 0), MAX_FRAME_DT_MS);
+
+  // Advance progress proportional to elapsed REAL time so playback speed
+  // is independent of the achieved frame rate (Req 2.4).
+  animationProgress = advanceProgress(animationProgress, rawDt, durationMs);
+
   if (animationProgress >= 1) {
     animationProgress = 1;
     updateCamera(1, dt);
     updateUI();
-    
+
     // Auto-stop at end
     setTimeout(stopAnimation, 100);
     return;
@@ -248,8 +329,16 @@ function animate(timestamp) {
 }
 
 function startPreview() {
-  if (!STUDIO_CONFIG.keyframes || STUDIO_CONFIG.keyframes.length < 2) {
-    alert("Please add at least 2 Keyframes to preview an animation.");
+  // Operation input validation (Req 4.3): refuse to start when required inputs
+  // are missing, surfacing exactly which ones via the status bus instead of a
+  // blocking alert. Start is permitted iff the missing-input list is empty.
+  const missing = validateForOperation('preview', STUDIO_CONFIG);
+  if (missing.length > 0) {
+    const message = describeMissingInputs('preview', STUDIO_CONFIG);
+    Studio.bus.emit(EVENTS.STATUS, { level: 'warn', message });
+    if (typeof window !== 'undefined' && typeof window.updateStatus === 'function') {
+      window.updateStatus(message);
+    }
     return;
   }
   
@@ -259,7 +348,10 @@ function startPreview() {
   lastTimestamp = performance.now();
   
   if (playPauseBtn) playPauseBtn.innerHTML = '<i class="ti ti-player-pause"></i>';
-  previewBtn.disabled = true;
+  if (window.setStudioBusy) window.setStudioBusy(true);
+  
+  const stopBtnMap = document.getElementById('btn-stop');
+  if (stopBtnMap) stopBtnMap.style.display = 'inline-block';
   
   if (window.studioAudioCtx && window.studioAudioBuf) {
     if (window.studioAudioCtx.state === 'suspended') window.studioAudioCtx.resume();
@@ -272,9 +364,12 @@ function startPreview() {
   rafId = requestAnimationFrame(animate);
 }
 
-previewBtn.addEventListener('click', startPreview);
-playPauseBtn.addEventListener('click', togglePause);
-stopBtn.addEventListener('click', stopAnimation);
+if (previewBtn) previewBtn.addEventListener('click', startPreview);
+if (playPauseBtn) playPauseBtn.addEventListener('click', togglePause);
+if (stopBtn) stopBtn.addEventListener('click', stopAnimation);
+
+const mapStopBtn = document.getElementById('btn-stop');
+if (mapStopBtn) mapStopBtn.addEventListener('click', stopAnimation);
 
 // Export for capture.js and storyboard
 window.studioAnimator = {
@@ -319,5 +414,20 @@ document.addEventListener('keydown', (e) => {
     const fps = STUDIO_CONFIG.fps || 30;
     const totalFrames = (STUDIO_CONFIG.duration || 30) * fps;
     window.scrubCameraToTime(animationProgress - (1 / totalFrames));
+  } else if (e.code === 'KeyK') {
+    e.preventDefault();
+    if (isPreviewing && !isPaused) togglePause();
+  } else if (e.code === 'KeyL') {
+    e.preventDefault();
+    if (!isPreviewing || isPaused) {
+      if (!isPreviewing) startPreview();
+      else togglePause();
+    }
+  } else if (e.code === 'KeyJ') {
+    e.preventDefault();
+    if (isPreviewing && !isPaused) togglePause();
+    // Rewind by a larger amount, e.g. 1 second
+    const duration = STUDIO_CONFIG.duration || 30;
+    window.scrubCameraToTime(animationProgress - (1 / duration));
   }
 });

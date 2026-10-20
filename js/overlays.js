@@ -8,6 +8,7 @@ let overlayCanvas, overlayCtx;
 
 function initOverlayCanvas() {
   overlayCanvas = document.createElement('canvas');
+  overlayCanvas.id = 'overlay-canvas';
   overlayCanvas.style.cssText = [
     'position: absolute',
     'top: 0', 'left: 0',
@@ -15,7 +16,7 @@ function initOverlayCanvas() {
     'pointer-events: none',
     'z-index: 5',
   ].join(';');
-  document.getElementById('map-wrap').appendChild(overlayCanvas);
+  document.getElementById('map-container').appendChild(overlayCanvas);
 
   // Match canvas pixel dimensions to the Mapbox canvas
   function syncSize() {
@@ -45,6 +46,7 @@ STUDIO_CONFIG.overlays = {
   vignette:  { enabled: false },
   letterbox: { enabled: false, ratio: 2.35 },
   tiltShift: { enabled: false },
+  lut:       { enabled: false, type: 'warm' },
 };
 
 // ── Master compositor — called once per frame during capture ──
@@ -59,7 +61,7 @@ function compositeOverlays(t) {
 
   ctx.clearRect(0, 0, W, H);
   
-  if (!ov.title.enabled && !ov.progress.enabled && !ov.compass.enabled && !ov.distance.enabled && !ov.vignette.enabled && !ov.letterbox.enabled) {
+  if (!ov.title.enabled && !ov.progress.enabled && !ov.compass.enabled && !ov.distance.enabled && !ov.vignette.enabled && !ov.letterbox.enabled && !ov.lut.enabled) {
       return;
   }
 
@@ -212,6 +214,14 @@ function compositeOverlays(t) {
     }
   }
 
+  // ── Cinematic LUT ──
+  if (ov.lut && ov.lut.enabled) {
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = ov.lut.type === 'warm' ? 'rgba(253, 184, 19, 0.15)' : 'rgba(10, 132, 255, 0.15)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
   ctx.restore();
 }
 window.compositeOverlays = compositeOverlays;
@@ -222,96 +232,6 @@ function drawPreviewOverlay(t) {
 }
 window.drawPreviewOverlay = drawPreviewOverlay;
 
-// ── Overlay settings UI ──
-function buildOverlayUI() {
-  const container = document.getElementById('overlay-settings');
-  if (!container) return;
-  const ov = STUDIO_CONFIG.overlays;
-
-  container.innerHTML = `
-    <p class="section-label" style="margin-bottom:8px;">Overlays</p>
-
-    <!-- Title card -->
-    <div style="margin-bottom:12px; padding:12px; background:var(--bg-panel-section);
-                border-radius:6px; border:1px solid var(--border)">
-      <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; font-weight:500; cursor:pointer;">
-        <input type="checkbox" id="ov-title-enabled"> Title Card
-      </label>
-      <input id="ov-title-text" type="text" class="select-input" value="${ov.title.text}"
-        placeholder="Trek name" style="width:100%; margin-bottom:6px; cursor:text; background-image:none;">
-      <input id="ov-title-sub" type="text" class="select-input" value="${ov.title.subtitle}"
-        placeholder="Subtitle" style="width:100%; cursor:text; background-image:none;">
-    </div>
-
-    <!-- Progress bar -->
-    <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:pointer;">
-      <input type="checkbox" id="ov-progress-enabled"> Progress bar
-    </label>
-
-    <!-- Compass -->
-    <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:pointer;">
-      <input type="checkbox" id="ov-compass-enabled"> Compass rose
-    </label>
-
-    <!-- Distance counter -->
-    <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:pointer;">
-      <input type="checkbox" id="ov-distance-enabled"> Distance counter
-    </label>
-
-    <div style="border-top:1px solid var(--border); margin:12px 0;"></div>
-    <p class="section-label" style="margin-bottom:8px;">Cinematic Effects</p>
-
-    <!-- Vignette -->
-    <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:pointer;">
-      <input type="checkbox" id="ov-vignette-enabled"> Vignette
-    </label>
-
-    <!-- Letterbox -->
-    <label style="display:flex; align-items:center; gap:6px; margin-bottom:8px; cursor:pointer;">
-      <input type="checkbox" id="ov-letterbox-enabled"> Widescreen Mattes (2.35:1)
-    </label>
-
-    <!-- Tilt-Shift -->
-    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-      <input type="checkbox" id="ov-tiltshift-enabled"> Tilt-Shift Depth of Field
-    </label>
-  `;
-
-  // Wire checkboxes
-  const wire = (id, prop, subProp) => {
-    document.getElementById(id).addEventListener('change', e => {
-      STUDIO_CONFIG.overlays[prop][subProp] = e.target.checked;
-      
-      // Special handling for tilt-shift CSS class
-      if (prop === 'tiltShift') {
-        if (e.target.checked) overlayCanvas.classList.add('tilt-shift');
-        else overlayCanvas.classList.remove('tilt-shift');
-      }
-
-      drawPreviewOverlay(window.studioAnimator && window.studioAnimator.getProgress ? window.studioAnimator.getProgress() : 0);
-    });
-    document.getElementById(id).checked = STUDIO_CONFIG.overlays[prop][subProp];
-  };
-  wire('ov-title-enabled',    'title',    'enabled');
-  wire('ov-progress-enabled', 'progress', 'enabled');
-  wire('ov-compass-enabled',  'compass',  'enabled');
-  wire('ov-distance-enabled', 'distance', 'enabled');
-  wire('ov-vignette-enabled', 'vignette', 'enabled');
-  wire('ov-letterbox-enabled', 'letterbox', 'enabled');
-  wire('ov-tiltshift-enabled', 'tiltShift', 'enabled');
-
-  document.getElementById('ov-title-text').addEventListener('input', e => {
-    STUDIO_CONFIG.overlays.title.text = e.target.value;
-    window._titleCacheDirty = true;
-    drawPreviewOverlay(window.studioAnimator && window.studioAnimator.getProgress ? window.studioAnimator.getProgress() : 0);
-  });
-  document.getElementById('ov-title-sub').addEventListener('input', e => {
-    STUDIO_CONFIG.overlays.title.subtitle = e.target.value;
-    window._titleCacheDirty = true;
-    drawPreviewOverlay(window.studioAnimator && window.studioAnimator.getProgress ? window.studioAnimator.getProgress() : 0);
-  });
-}
-
 // ── Populate totalKm when trek loads (hook into existing trek load event) ──
 document.addEventListener('trek-loaded', e => {
   STUDIO_CONFIG.overlays.distance.totalKm = e.detail?.distanceKm || 0;
@@ -320,14 +240,12 @@ document.addEventListener('trek-loaded', e => {
 // Since the map might already be loaded, check
 if (state.map && state.map.isStyleLoaded()) {
     initOverlayCanvas();
-    buildOverlayUI();
 } else {
     // Wait for map
     const interval = setInterval(() => {
         if (state.map && state.map.isStyleLoaded()) {
             clearInterval(interval);
             initOverlayCanvas();
-            buildOverlayUI();
         }
     }, 100);
 }

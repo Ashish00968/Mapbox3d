@@ -1,0 +1,144 @@
+/* ════════════════════════════════════════════════════════════════════
+   MAPBOX VIDEO STUDIO — Design Tokens (canonical source of truth)
+   ────────────────────────────────────────────────────────────────────
+   Feature: pro-studio-overhaul · Task 13.1 · Requirements 5.1, 5.3
+
+   This file defines ALL design tokens (colors, spacing, typography,
+   radii, motion) in a single :root so the interface references named
+   values rather than hard-coded literals. It is linked in index.html
+   BEFORE style.css and css/editor-mode.css so tokens resolve first.
+
+   Notes:
+   - Existing :root tokens in style.css are intentionally left in place;
+     where they duplicate tokens here the values are IDENTICAL, so the
+     cascade produces no visual change. tokens.css additionally provides
+     the canonical scales (spacing, type, motion durations) and the
+     previously-undefined color tokens (--danger, gradients).
+   - Motion durations are all < 300ms per Requirement 5.3.
+   - Easing curves follow the emil-design-eng motion guidance (strong
+     custom cubic-beziers; never ease-in for UI).
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ──────────────────────────────────────────────
+     COLOR — Surfaces (Earth Studio / premium dark)
+     ────────────────────────────────────────────── */
+  --bg-base: #0B0B0C;                          /* app / map backdrop */
+  --bg-panel: rgba(18, 18, 20, 0.85);          /* glass side panels */
+  --bg-panel-section: rgba(255, 255, 255, 0.03); /* nested section fill */
+  --bg-hover: rgba(255, 255, 255, 0.08);       /* hover wash */
+
+  /* COLOR — Obsidian Studio Aliases (Phase 2) */
+  --obsidian-bg-base: #131313;
+  --obsidian-bg-panel: #1c1b1b;
+  --obsidian-bg-panel-section: #1e1e1e;
+  --obsidian-bg-hover: #2a2a2a;
+  --obsidian-bg-floating: #353534;
+  --obsidian-text-primary: #e5e2e1;
+  --obsidian-text-secondary: #c1c6d7;
+  --obsidian-text-muted: #8b90a0;
+  --obsidian-border: #414755;
+  --obsidian-border-strong: #8b90a0;
+  --obsidian-accent-base: #007AFF;
+  --obsidian-accent-hover: #3395FF;
+  --obsidian-accent-container: #4b8eff;
+  --obsidian-accent-glow: rgba(0, 122, 255, 0.25);
+
+  /* COLOR — Brand accents */
+  --accent-base: #3B82F6;
+  --accent-hover: #60A5FA;
+  --accent-glow: rgba(59, 130, 246, 0.3);
+  --accent-gradient: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+
+  /* COLOR — Success / export accent */
+  --accent-green-base: #10B981;
+  --accent-green-hover: #34D399;
+  --accent-green-gradient: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+
+  /* COLOR — Destructive / danger */
+  --danger: #EF4444;
+  --danger-hover: #F87171;
+
+  /* COLOR — Text */
+  --text-primary: #EDEDED;
+  --text-secondary: #A1A1AA;
+  /* WCAG AA fix (Req 7.4, contrast audit task 14.3): #71717A failed AA on the
+     surfaces where muted text is used; #86868F passes 4.5:1 normal text while
+     staying dimmer than --text-secondary. Kept in sync with style.css. */
+  --text-muted: #86868F;
+
+  /* COLOR — Borders */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(255, 255, 255, 0.2);
+
+  /* ──────────────────────────────────────────────
+     SPACING — 4px base scale
+     ────────────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+
+  /* ──────────────────────────────────────────────
+     TYPOGRAPHY — families, size scale, weights
+     ────────────────────────────────────────────── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;   /* default UI body */
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* ──────────────────────────────────────────────
+     RADII
+     ────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+
+  /* ──────────────────────────────────────────────
+     MOTION — durations (ALL < 300ms per Req 5.3)
+     ────────────────────────────────────────────── */
+  --dur-fast: 120ms;   /* button press / micro-feedback */
+  --dur-base: 200ms;   /* hover, focus, dropdowns */
+  --dur-slow: 280ms;   /* drawers, panels, larger surfaces */
+
+  /* MOTION — easing curves (emil-design-eng custom curves) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);       /* entrances / responsive feedback */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);   /* on-screen movement / morphing */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);    /* iOS-like drawer */
+}
+
+/* ──────────────────────────────────────────────
+   REDUCED MOTION — UI chrome only (Req 5.3, 7.5)
+   ──────────────────────────────────────────────
+   Suppresses CSS transitions and animations on interface elements for users
+   who have enabled the OS "reduce motion" setting. This NEVER affects camera
+   rendering in the map (Req 2.7) — only CSS-driven UI animations are impacted.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

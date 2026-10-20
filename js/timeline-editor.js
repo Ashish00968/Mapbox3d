@@ -91,6 +91,7 @@ function renderTracks() {
       e.stopPropagation();
       setPlayheadTime(t);
       if (window.scrubCameraToTime) window.scrubCameraToTime(kf.t);
+      if (window.updateKeyframePanel) window.updateKeyframePanel(kf.t);
     };
 
     trackPos.appendChild(el);
@@ -181,5 +182,71 @@ document.addEventListener('DOMContentLoaded', () => {
         window.addKeyframe(normTime);
       }
     };
+  }
+});
+
+window.updateTimelineDuration = function(newDuration) {
+  duration = newDuration;
+  if (scrollContent) {
+    const totalWidth = duration * pixelsPerSecond;
+    scrollContent.style.width = `${totalWidth}px`;
+    renderRuler(totalWidth);
+    renderTracks();
+    setPlayheadTime(currentTime);
+  }
+  if (window.studioAudioBuf) {
+    document.dispatchEvent(new CustomEvent('audio-loaded'));
+  }
+};
+
+// ── Audio Waveform Rendering on Active Timeline ──
+document.addEventListener('audio-loaded', () => {
+  const canvas = document.getElementById('audio-waveform-canvas');
+  const header = document.getElementById('track-header-audio');
+  const lane = document.getElementById('track-lane-audio');
+  
+  if (!canvas || !header || !lane || !window.studioAudioBuf) return;
+  
+  header.style.display = 'flex';
+  lane.style.display = 'block';
+  
+  const dpr = window.devicePixelRatio || 1;
+  const width = duration * pixelsPerSecond;
+  const height = 40; // matches timeline lane height
+  
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+  
+  ctx.fillStyle = '#4a9eff';
+  
+  const audioBuf = window.studioAudioBuf;
+  const data = audioBuf.getChannelData(0);
+  
+  const totalSamples = data.length;
+  const targetSamples = Math.min(totalSamples, Math.ceil(duration * audioBuf.sampleRate));
+  
+  const step = Math.ceil(targetSamples / width);
+  const amp = height / 2;
+  
+  for(let i = 0; i < width; i++) {
+      let min = 1.0;
+      let max = -1.0;
+      const startIndex = i * step;
+      if (startIndex >= data.length) break;
+      
+      for (let j = 0; j < step; j++) {
+          const datum = data[startIndex + j]; 
+          if (datum !== undefined) {
+            if (datum < min) min = datum;
+            if (datum > max) max = datum;
+          }
+      }
+      ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
   }
 });
