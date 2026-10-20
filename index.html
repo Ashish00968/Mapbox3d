@@ -26,15 +26,19 @@
 
 <div id="top-workspace" style="display:flex; flex:1; min-height:0;">
 
+  <!-- Mobile Backdrop Overlay -->
+  <div id="mobile-backdrop" class="mobile-backdrop" style="display:none;"></div>
+
   <!-- ═══ LEFT PANEL ═══ -->
   <div id="left-panel">
     <div id="left-header" style="display:flex; justify-content:space-between; align-items:center;">
       <span style="font-size:13px; font-weight:500; color:var(--text-primary); display: flex; align-items: center; gap: 8px;">
         <i class="ti ti-mountain" aria-hidden="true" style="font-size: 16px;"></i> Video Studio
       </span>
-      <div style="display:flex; gap: 8px;">
+      <div style="display:flex; gap: 6px; align-items: center;">
         <button class="btn-ghost" id="load-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-upload"></i> Load</button>
         <button class="btn-ghost" id="save-project-btn" style="padding: 4px 8px; font-size: 11px;"><i class="ti ti-download"></i> Save</button>
+        <button class="btn-ghost" id="mobile-panel-close" class="mobile-only-btn" style="padding: 4px 6px; font-size: 14px; display: none;" aria-label="Close Drawer"><i class="ti ti-x"></i></button>
         <input type="file" id="load-project-input" accept=".mbv,.studio,.json" style="display:none">
       </div>
     </div>
@@ -354,6 +358,12 @@
 
     <!-- Floating toolbar -->
     <div id="map-toolbar">
+      <!-- Mobile sidebar toggle -->
+      <button id="mobile-sidebar-toggle" class="map-tool-btn mobile-only-btn" title="Open Studio Settings" aria-label="Open Studio Settings" style="display:none;">
+        <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+      </button>
+      <div class="map-tool-divider mobile-only-btn" style="display:none;"></div>
+
       <!-- Custom Search Bar Container -->
       <div id="geocoder-container"></div>
       
@@ -447,6 +457,7 @@
 <div id="timeline-workspace" class="timeline-workspace">
   <div id="timeline-header" class="timeline-header">
     <div style="display:flex; align-items:center; gap: 12px;">
+      <button id="timeline-toggle-collapse" class="btn-ghost" style="padding: 2px 6px; font-size: 13px;" title="Toggle Timeline Height" aria-label="Toggle Timeline"><i class="ti ti-chevron-down"></i></button>
       <span style="font-size:12px; font-weight:600; color:var(--text-primary);"><i class="ti ti-timeline"></i> Timeline Editor</span>
       <div style="display:flex; gap: 4px;">
         <button id="timeline-play-pause" class="btn-ghost" style="padding: 4px 8px; font-size: 14px;"><i class="ti ti-player-play"></i></button>

@@ -388,3 +388,62 @@ if (Studio && Studio.bus) {
     }
   });
 }
+
+// ── Mobile Responsive Drawer & Timeline Collapse Handlers ──
+function initMobileUI() {
+  const leftPanel = document.getElementById('left-panel');
+  const backdrop = document.getElementById('mobile-backdrop');
+  const toggleBtn = document.getElementById('mobile-sidebar-toggle');
+  const closeBtn = document.getElementById('mobile-panel-close');
+  const timelineWorkspace = document.getElementById('timeline-workspace');
+  const timelineCollapseBtn = document.getElementById('timeline-toggle-collapse');
+
+  function openMobileDrawer() {
+    if (leftPanel) leftPanel.classList.add('mobile-open');
+    if (backdrop) backdrop.style.display = 'block';
+  }
+
+  function closeMobileDrawer() {
+    if (leftPanel) leftPanel.classList.remove('mobile-open');
+    if (backdrop) backdrop.style.display = 'none';
+  }
+
+  if (toggleBtn) toggleBtn.addEventListener('click', openMobileDrawer);
+  if (closeBtn) closeBtn.addEventListener('click', closeMobileDrawer);
+  if (backdrop) backdrop.addEventListener('click', closeMobileDrawer);
+
+  // Auto-close mobile drawer when switching tabs on small screens
+  document.querySelectorAll('#left-tabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.innerWidth <= 768) {
+        // give brief delay so the user sees tab activation
+        setTimeout(() => closeMobileDrawer(), 150);
+      }
+    });
+  });
+
+  // Timeline collapse / expand toggle
+  if (timelineCollapseBtn && timelineWorkspace) {
+    timelineCollapseBtn.addEventListener('click', () => {
+      const isCollapsed = timelineWorkspace.classList.toggle('timeline-collapsed');
+      const icon = timelineCollapseBtn.querySelector('i');
+      if (icon) {
+        icon.className = isCollapsed ? 'ti ti-chevron-up' : 'ti ti-chevron-down';
+      }
+      // Trigger map resize so canvas expands cleanly
+      setTimeout(() => {
+        if (window.map && typeof window.map.resize === 'function') {
+          window.map.resize();
+        }
+      }, 250);
+    });
+  }
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initMobileUI);
+  } else {
+    initMobileUI();
+  }
+}
