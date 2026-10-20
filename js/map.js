@@ -14,6 +14,13 @@ import { Studio, EVENTS } from './event-bus.js';
 // ─────────────────────────────────────────────
 // TOKEN — read from the single centralized config source (Req 8.1)
 // ─────────────────────────────────────────────
+if (!STUDIO_CONFIG.mapboxToken || STUDIO_CONFIG.mapboxToken === 'YOUR_MAPBOX_TOKEN') {
+  const promptToken = window.prompt('Enter your Mapbox Public Access Token (pk.*):');
+  if (promptToken && promptToken.trim()) {
+    STUDIO_CONFIG.mapboxToken = promptToken.trim();
+    try { window.localStorage.setItem('mapbox_token', promptToken.trim()); } catch (e) {}
+  }
+}
 mapboxgl.accessToken = STUDIO_CONFIG.mapboxToken;
 
 // ─────────────────────────────────────────────
